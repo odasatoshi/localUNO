@@ -19,6 +19,7 @@ from lUNO.engine.actions import (
     ChooseColorAction,
     DeclareUnoAction,
     DrawAction,
+    PassAction,
     PlayAction,
     ResetAction,
     coerce_card_id,
@@ -34,6 +35,7 @@ ALL_ACTIONS = [
     ChooseColorAction(player="p1", color=Color.RED),
     DeclareUnoAction(player="p2"),
     ChallengeUnoAction(player="p2"),
+    PassAction(player="p1"),
     ResetAction(player="p1"),
 ]
 

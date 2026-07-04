@@ -79,6 +79,9 @@ class GameState:
     # 増えたらクリアする（管理は state トランスフォーマ＝ルール側、§3.2）。frozenset
     # なので不変・ハッシュ可能で等価判定に含まれる。
     uno_declared: frozenset[str] = frozenset()
+    # ドロー後プレイ（house-rules §7）の一時マーカー。自主ドロー直後、この ID のカードを
+    # 先頭にした出しだけを許す（None=通常時）。play/pass 後にルールが None へ戻す。
+    drawn_card_id: int | None = None
 
     def __post_init__(self) -> None:
         # frozen をすり抜ける可変 dict を読み取り専用ビューへ（§3.2 の所有権を担保）
@@ -126,6 +129,10 @@ class GameState:
     def with_uno_declared(self, players: Iterable[str]) -> GameState:
         """UNO 宣言済みプレイヤー集合を差し替える（house-rules §6）。"""
         return self.replace(uno_declared=frozenset(players))
+
+    def with_drawn_card_id(self, card_id: int | None) -> GameState:
+        """ドロー後プレイの一時マーカーを差し替える（house-rules §7）。"""
+        return self.replace(drawn_card_id=card_id)
 
     def with_awaiting(self, awaiting: Mapping[str, Iterable[str]]) -> GameState:
         """受理可能アクションのマップを差し替える（値はタプル化して不変化）。"""
@@ -201,6 +208,7 @@ class PlayerView:
     awaiting: Mapping[str, tuple[str, ...]]
     winner: str | None
     uno_declared: frozenset[str]
+    drawn_card_id: int | None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "hand_counts", _readonly(self.hand_counts))
@@ -222,6 +230,7 @@ class PlayerView:
             "awaiting": {pid: list(actions) for pid, actions in self.awaiting.items()},
             "winner": self.winner,
             "uno_declared": sorted(self.uno_declared),
+            "drawn_card_id": self.drawn_card_id,
         }
 
 
@@ -249,6 +258,7 @@ def player_view(state: GameState, player_id: str) -> PlayerView:
         awaiting=dict(state.awaiting),
         winner=state.winner,
         uno_declared=state.uno_declared,
+        drawn_card_id=state.drawn_card_id,
     )
 
 

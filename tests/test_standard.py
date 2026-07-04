@@ -273,6 +273,9 @@ def test_standard_score_counts_loser_hand():
 
 
 def test_full_round_play_draw_effect_win():
+    # standard 単体の一巡を担保する（active な ENABLED_RULES ではローカルルール #40
+    # draw_after_play がドロー後に play/pass の選択を挟む。
+    # active 側は test_draw_after_play が担保）。
     reg = build_registry([standard.RULES])
     st = state_with(
         p1=(card("5", Color.RED, 1), card("2", Color.RED, 2)),
