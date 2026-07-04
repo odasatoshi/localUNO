@@ -157,6 +157,13 @@ function render(view) {
     "hidden",
     over || myCount !== 1 || declared.includes(me),
   );
+  // 相手が1枚・未宣言・未終局のときだけ「UNO言ってない!」（指摘）を出す。
+  // 該当しないのに送ると誤爆で自分が2枚引くため、条件成立時のみ表示する。
+  toggleClass(
+    document.getElementById("challenge-btn"),
+    "hidden",
+    over || oppCount !== 1 || declared.includes(opponent),
+  );
 
   // 手番・勝敗の表示
   const banner = document.getElementById("banner");
@@ -241,6 +248,9 @@ function wireControls() {
   });
   document.getElementById("uno-btn").addEventListener("click", () => {
     send({ type: "declare_uno", player: state.me });
+  });
+  document.getElementById("challenge-btn").addEventListener("click", () => {
+    send({ type: "challenge_uno", player: state.me });
   });
   document.getElementById("reset-btn").addEventListener("click", () => {
     send({ type: "reset", player: state.me });
