@@ -95,13 +95,15 @@ def test_index_has_play_button():
 
 def test_app_js_supports_multi_select_play():
     """複数枚出し UI: タップで選択トグルし、選択順に card_ids でまとめて出す（#62）。"""
-    # 選択状態を保持し、トグルで付け外しする
-    assert "selected" in APP_JS
+    # タップ順を送信順として保持するトグル実装を実際に要求する
     assert "toggleSelect" in APP_JS
-    # 「出す」ボタンで選択集合を送る（クリック即単数送信ではない）
+    assert "state.selected.push" in APP_JS  # 末尾追加＝送信順を保持
+    assert "state.selected.indexOf" in APP_JS  # 選択済み判定→トグル off
+    assert 'classList.add("selected")' in APP_JS  # 選択ハイライトの結線
+    # 「出す」ボタンで選択配列をそのまま card_ids に載せて送る
     assert "play-btn" in APP_JS
     assert "playSelected" in APP_JS
-    assert "state.selected" in APP_JS
+    assert "card_ids: state.selected" in APP_JS
     # クリックで即 1 枚送る旧挙動を残していない（選択→出す に一本化）
     assert "card_ids: [card.id]" not in APP_JS
 
