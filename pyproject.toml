@@ -5,7 +5,9 @@ description = "ローカルルールの UNO（二人対戦・LAN内専用）"
 readme = "README.md"
 requires-python = ">=3.11"
 # 実行時依存は機能ごとに該当 feature PR で uv add する（CLAUDE.md 規約）
-dependencies = []
+dependencies = [
+    "pillow>=12.3.0",
+]
 
 [project.scripts]
 luno = "lUNO.cli:main"
