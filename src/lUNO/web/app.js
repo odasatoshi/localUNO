@@ -157,13 +157,10 @@ function render(view) {
     "hidden",
     over || myCount !== 1 || declared.includes(me),
   );
-  // 相手が1枚・未宣言・未終局のときだけ「UNO言ってない!」（指摘）を出す。
-  // 該当しないのに送ると誤爆で自分が2枚引くため、条件成立時のみ表示する。
-  toggleClass(
-    document.getElementById("challenge-btn"),
-    "hidden",
-    over || oppCount !== 1 || declared.includes(opponent),
-  );
+  // 「UNO言ってない!」（指摘）は対局中いつでも可能にする（house-rules §6 の駆け引き）。
+  // 相手が該当しないのに突けば誤爆で自分が2枚ドロー、正しく突けば相手が2枚。成否と
+  // ペナルティはサーバが判定（サーバ権威）。UI は終局時のみ隠す。
+  toggleClass(document.getElementById("challenge-btn"), "hidden", over);
 
   // 手番・勝敗の表示
   const banner = document.getElementById("banner");
