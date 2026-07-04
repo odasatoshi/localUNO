@@ -167,9 +167,12 @@ def test_app_js_declare_uno_wired_and_gated_by_state():
     # wiring: uno-btn の click ハンドラで declare_uno を送る
     assert re.search(r'getElementById\("uno-btn"\)\.addEventListener\(\s*"click"', APP_JS)
     assert re.search(r'type:\s*"declare_uno"', APP_JS)
-    # gating: awaiting ではなく uno_declared / hand_counts で出し分ける
+    # gating: awaiting ではなく state（uno_declared / hand_counts）で出し分ける
     assert "uno_declared" in APP_JS
-    assert 'getElementById("uno-btn")' in APP_JS
+    assert "hand_counts" in APP_JS
+    # gating 固有: uno-btn の hidden を toggleClass で出し分ける結線（wiring 行では
+    # 満たせないパターン。表示条件を消すと落ちる）
+    assert re.search(r'toggleClass\(\s*[^;]*?uno-btn[^;]*?"hidden"', APP_JS, re.S)
 
 
 # --- WS 往復（フロントが送る実ペイロードがサーバと整合するか） ---------------
