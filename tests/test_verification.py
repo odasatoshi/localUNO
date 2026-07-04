@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-import re
+import ast
 from pathlib import Path
 
 import lUNO.engine as engine_pkg
@@ -43,12 +43,19 @@ def test_engine_does_not_import_rules():
     エンジンがルールを知らない＝ルール追加でエンジンを改修する必要が構造的に無い。
     """
     engine_dir = Path(engine_pkg.__file__).parent
-    import_re = re.compile(r"^\s*(from|import)\s+.*\brules\b", re.MULTILINE)
-    offenders = []
-    for py in sorted(engine_dir.glob("*.py")):
-        src = py.read_text(encoding="utf-8")
-        if import_re.search(src):
-            offenders.append(py.name)
+    offenders: list[tuple[str, str]] = []
+    for py in sorted(engine_dir.rglob("*.py")):
+        tree = ast.parse(py.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            mods: list[str] = []
+            if isinstance(node, ast.Import):
+                mods = [a.name for a in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                base = node.module or ""
+                mods = [base] + [f"{base}.{a.name}".strip(".") for a in node.names]
+            for m in mods:
+                if "rules" in m.split("."):
+                    offenders.append((py.name, m))
     assert offenders == [], f"engine が rules を import している: {offenders}"
 
 
@@ -141,11 +148,11 @@ def test_draw2_stack_rule_is_active_in_enabled_set():
     from lUNO.rules import draw2_stack
 
     st = GameState(
-        # p1 は draw2 の他に1枚持つ（draw2 を出しても上がらない＝終局で awaiting が
-        # 空にならないようにする）
+        # 各自 draw2 の他に1枚持つ（draw2 を出しても上がらない＝終局で awaiting/pending が
+        # クリアされないようにする）
         hands={
             "p1": (card("draw2", Color.RED, 1), card("5", Color.RED, 5)),
-            "p2": (card("draw2", Color.BLUE, 2),),
+            "p2": (card("draw2", Color.BLUE, 2), card("9", Color.GREEN, 6)),
         },
         draw_pile=(card("0", Color.RED, 3),),
         discard_pile=(card("7", Color.RED, 4),),
@@ -160,7 +167,14 @@ def test_draw2_stack_rule_is_active_in_enabled_set():
     after_base = apply_action(base, st, PlayAction("p1", card_ids=(1,)))
     after_stack = apply_action(stacked, st, PlayAction("p1", card_ids=(1,)))
 
-    # 標準のみ: 相手は draw のみ
+    # 標準のみ: 相手は draw のみ（スタック不可）
     assert after_base.awaiting.get("p2") == ("draw",)
-    # スタック有効: 相手の受理集合に play が加わる（スタック可能）
+    assert after_base.pending_draw == 2
+    # スタック有効: 相手の受理集合に play が加わる（Draw2 で返せる）
     assert "play" in after_stack.awaiting.get("p2", ())
+    assert after_stack.pending_draw == 2
+
+    # 完了条件2: 実際に Draw2 を返すと累積が 2 → 4 に積み上がる（rules 内だけで実現）
+    after_return = apply_action(stacked, after_stack, PlayAction("p2", card_ids=(2,)))
+    assert after_return.pending_draw == 4
+    assert "play" in after_return.awaiting.get("p1", ())  # 返し合いが連鎖できる

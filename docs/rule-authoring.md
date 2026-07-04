@@ -52,15 +52,20 @@ handler(state, ctx) -> state
 - 対象: `on_before_play` / `on_after_play` / `on_draw` / `on_turn_end` / `on_choose_color` など、効果適用・手番送り・フェーズ遷移。
 - 前のハンドラが返した state を次が受け取る。永続フィールドの書き換えはすべてここで行う。
 
-**例: ドロー2スタック**（現在の state 値を読み、加算して書き戻す）
+**例: 累積の書き方**（現在の state 値を読み、加算して書き戻す）
 
 ```python
-def draw2_stack(state, ctx):
+# 「前の状態を引き継ぐ」累積は、現在値を読んで書き戻す（重ねるほど積み上がる）
+def accumulate_draw2(state, ctx):
     if ctx.card.symbol != "draw2":
         return state
-    # 現在の pending_draw を読んで +2。重ねるほど積み上がる（シードは常に現在値）
     return state.with_pending_draw(state.pending_draw + 2)
 ```
+
+> 実装との対応（誤解防止）: 標準の Draw2 の累積（`+2`）は `rules/standard.py` の
+> `apply_effect` が担う。ハウスルールの `rules/draw2_stack.py` は `pending_draw` を
+> **触らず**、Draw2 を出された受け手の受理集合に `play` を足して「Draw2 で返せる」よう
+> にするだけ（累積自体は standard 側で積み上がる）。上のコードは累積パターンの説明用。
 
 ## can_play の合成意味論（OR / AND）
 
