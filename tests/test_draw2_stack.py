@@ -99,6 +99,20 @@ def test_draw4_pending_does_not_allow_draw2_stack():
         apply_action(reg, after, PlayAction("p2", (2,)))  # Draw2 で返せない
 
 
+def test_win_on_draw2_still_valid():
+    """Draw2 を最後の1枚で出して上がると winner 確定・awaiting 空・pending 0（回帰防止）。"""
+    reg = _reg()
+    st = _state(
+        p1=(card(DRAW2, Color.RED, 1),),  # 最後の1枚が Draw2
+        p2=(card("9", Color.GREEN, 3),),
+        top=card("7", Color.RED, 4),
+    )
+    out = apply_action(reg, st, PlayAction("p1", (1,)))
+    assert out.winner == "p1"
+    assert out.awaiting == {}
+    assert out.pending_draw == 0
+
+
 def test_stack_via_active_ruleset():
     """有効化リスト実配列でも Draw2 スタックが効く（他ハウスルールと非干渉）。"""
     st = _state(

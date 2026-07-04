@@ -27,7 +27,12 @@ _DRAW_OR_RETURN = ("draw", "play")
 
 
 def only_draw2_during_stack(current: bool, ctx: Ctx) -> bool:
-    """Draw2 累積中は Draw2 以外を出せない（返しは Draw2 に限る、色不問）。"""
+    """Draw2 累積中は Draw2 以外を出せない（返しは Draw2 に限る、色不問）。
+
+    条件式は ``pending_draw>0`` 全般で真になり得る（Draw4 pending も含む）が、Draw4
+    pending 時は standard が受理集合を「引くだけ」に保ち play を許さないため、この判定に
+    到達しない（＝Draw4 スタックを誘発しない、§3）。
+    """
     if not current:
         return False
     if ctx.state.pending_draw > 0 and ctx.card is not None and ctx.card.symbol != DRAW2:
