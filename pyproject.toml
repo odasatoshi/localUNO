@@ -1,0 +1,35 @@
+[project]
+name = "local-uno"
+version = "0.1.0"
+description = "ローカルルールの UNO（二人対戦・LAN内専用）"
+readme = "README.md"
+requires-python = ">=3.11"
+# 実行時依存は機能ごとに該当 feature PR で uv add する（CLAUDE.md 規約）
+dependencies = []
+
+[project.scripts]
+luno = "lUNO.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.6",
+    "pytest>=8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lUNO"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
