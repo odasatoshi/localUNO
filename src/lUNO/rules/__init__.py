@@ -9,12 +9,14 @@
 from __future__ import annotations
 
 from ..engine.hooks import HookRegistry, build_registry
-from . import standard
+from . import reverse_off, standard
 from .standard import setup_game
 
 # 有効化リスト（起動時固定・記述順）。先頭は必ず standard。
+# 以降はハウスルール（docs/house-rules.md）を記述順に積む（後ろほど上書きが強い）。
 ENABLED_RULES = [
     standard.RULES,
+    reverse_off.RULES,  # #36 リバース無効化（§1）
 ]
 
 
@@ -28,4 +30,5 @@ __all__ = [
     "registry",
     "setup_game",
     "standard",
+    "reverse_off",
 ]
