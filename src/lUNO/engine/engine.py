@@ -29,6 +29,7 @@ from .actions import (
     ChooseColorAction,
     DeclareUnoAction,
     DrawAction,
+    PassAction,
     PlayAction,
     ResetAction,
 )
@@ -144,9 +145,24 @@ def _pctx(
 def _draw(reg: HookRegistry, state: GameState, action: DrawAction) -> GameState:
     state = state.with_awaiting({})
     n = state.pending_draw if state.pending_draw > 0 else 1
+    before = len(state.hands[action.player])
     state = draw_cards(state, action.player, n)
     state = state.with_pending_draw(0)
-    state = reg.transform(ON_DRAW, state, Ctx.from_state(state, action=action, owner=action.player))
+    drawn = state.hands[action.player][before:]  # 実際に引いたカード群（ドロー後プレイ判定用）
+    state = reg.transform(
+        ON_DRAW,
+        state,
+        Ctx.from_state(state, action=action, drawn_cards=drawn, owner=action.player),
+    )
+    return _advance_if_idle(reg, state, action.player)
+
+
+def _pass(reg: HookRegistry, state: GameState, action: PassAction) -> GameState:
+    """ドロー後の「出さずにパス」（house-rules §7）。受理は awaiting 依存（ルールが載せる）。
+
+    ドロー後マーカーを消し、既定の手番送りを行う。
+    """
+    state = state.with_drawn_card_id(None).with_awaiting({})
     return _advance_if_idle(reg, state, action.player)
 
 
@@ -198,6 +214,7 @@ _DISPATCH = {
     ChooseColorAction.type: _choose_color,
     DeclareUnoAction.type: _declare_uno,
     ChallengeUnoAction.type: _challenge_uno,
+    PassAction.type: _pass,
     ResetAction.type: _reset,
 }
 

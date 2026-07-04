@@ -70,6 +70,10 @@ class Ctx:
     """複数枚出しで実際に出す（出した）カード群。単数出しは要素1個。can_stack 判定と
     効果適用（Draw2 累積など、house-rules §2）が参照する。``card`` は先頭または
     トップ（呼び出し側が指定）。"""
+    drawn_cards: tuple[CardInstance, ...] | None = None
+    """draw で実際に引いたカード群（ON_DRAW で engine が渡す）。ドロー後プレイ
+    （house-rules §7）が「自主ドロー（1枚）か強制ドロー（複数）か」の判定と、引いた札の
+    特定に使う。"""
 
     @classmethod
     def from_state(
@@ -79,6 +83,7 @@ class Ctx:
         action: Action | None = None,
         card: CardInstance | None = None,
         played_cards: tuple[CardInstance, ...] | None = None,
+        drawn_cards: tuple[CardInstance, ...] | None = None,
         owner: str | None = None,
     ) -> Ctx:
         """GameState から ctx を組み立てる（配線ミス・state との二重管理を防ぐ）。
@@ -98,6 +103,7 @@ class Ctx:
             hand=state.hands.get(who),
             top_of_pile=state.top_of_pile(),
             played_cards=played_cards,
+            drawn_cards=drawn_cards,
         )
 
 
