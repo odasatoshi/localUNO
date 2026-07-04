@@ -6,7 +6,9 @@ readme = "README.md"
 requires-python = ">=3.11"
 # 実行時依存は機能ごとに該当 feature PR で uv add する（CLAUDE.md 規約）
 dependencies = [
+    "fastapi>=0.139.0",
     "pillow>=12.3.0",
+    "uvicorn>=0.50.0",
 ]
 
 [project.scripts]
@@ -16,6 +18,7 @@ luno = "lUNO.cli:main"
 dev = [
     "ruff>=0.6",
     "pytest>=8",
+    "httpx>=0.28.1",
 ]
 
 [build-system]
