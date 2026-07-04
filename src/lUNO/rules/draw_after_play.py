@@ -44,7 +44,7 @@ def only_drawn_card_leads(current: bool, ctx: Ctx) -> bool:
     marker = ctx.state.drawn_card_id
     if marker is not None and ctx.card is not None and ctx.card.id != marker:
         return False
-    return current
+    return True  # ここに来る時点で current は True（先頭の if で False は弾いている）
 
 
 def clear_drawn_marker(state: GameState, ctx: Ctx) -> GameState:

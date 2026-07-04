@@ -115,6 +115,22 @@ def test_multi_play_after_draw_with_drawn_lead():
     assert out.current_player == "p2"
 
 
+def test_forced_draw_single_card_not_treated_as_voluntary():
+    """強制ドロー中に山切れで1枚しか引けなくても自主ドロー扱いしない（誤判定防止）。"""
+    st = GameState(
+        hands={"p1": (card("5", Color.RED, 1),), "p2": (card("9", Color.GREEN, 3),)},
+        draw_pile=(card("0", Color.RED, 7),),  # 山は1枚だけ
+        discard_pile=(card(DRAW2, Color.RED, 5),),  # トップのみ＝再シャッフル不可
+        current_player="p2",
+        rng_state=random.Random(0).getstate(),
+        pending_draw=2,  # 強制ドロー2枚指定だが山は1枚
+        awaiting={"p2": ("draw", "play")},
+    )
+    out = apply(st, DrawAction("p2"))
+    assert out.drawn_card_id is None  # 自主ドロー扱いしない
+    assert out.current_player == "p1"  # 手番送り（play/pass を挟まない）
+
+
 def test_forced_draw2_does_not_offer_play():
     """強制ドロー（Draw2 で複数引く）はドロー後プレイに巻き込まれず手番が進む。"""
     st = _state(

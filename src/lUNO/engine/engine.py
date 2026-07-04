@@ -144,11 +144,14 @@ def _pctx(
 
 def _draw(reg: HookRegistry, state: GameState, action: DrawAction) -> GameState:
     state = state.with_awaiting({})
-    n = state.pending_draw if state.pending_draw > 0 else 1
+    forced = state.pending_draw > 0  # Draw2/4 の累積による強制ドローか（自主ドローと区別）
+    n = state.pending_draw if forced else 1
     before = len(state.hands[action.player])
     state = draw_cards(state, action.player, n)
     state = state.with_pending_draw(0)
-    drawn = state.hands[action.player][before:]  # 実際に引いたカード群（ドロー後プレイ判定用）
+    # ドロー後プレイ（#40）判定用に「自主ドローで引いた札」だけを渡す。強制ドローは None
+    # とし、山切れで1枚しか引けなくても自主ドローと誤判定させない。
+    drawn = None if forced else state.hands[action.player][before:]
     state = reg.transform(
         ON_DRAW,
         state,

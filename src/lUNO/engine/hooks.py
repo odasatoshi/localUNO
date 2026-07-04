@@ -71,9 +71,9 @@ class Ctx:
     効果適用（Draw2 累積など、house-rules §2）が参照する。``card`` は先頭または
     トップ（呼び出し側が指定）。"""
     drawn_cards: tuple[CardInstance, ...] | None = None
-    """draw で実際に引いたカード群（ON_DRAW で engine が渡す）。ドロー後プレイ
-    （house-rules §7）が「自主ドロー（1枚）か強制ドロー（複数）か」の判定と、引いた札の
-    特定に使う。"""
+    """**自主ドロー**で引いたカード群（ON_DRAW で engine が渡す）。Draw2/4 による強制
+    ドローでは ``None``（山切れで1枚しか引けなくても自主ドローと誤判定させないため）。
+    ドロー後プレイ（house-rules §7）が引いた札の特定に使う。"""
 
     @classmethod
     def from_state(
