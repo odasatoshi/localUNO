@@ -25,6 +25,7 @@ from collections.abc import Iterable
 
 from .actions import (
     Action,
+    ChallengeUnoAction,
     ChooseColorAction,
     DeclareUnoAction,
     DrawAction,
@@ -33,6 +34,7 @@ from .actions import (
 )
 from .cards import CardInstance
 from .hooks import (
+    CAN_STACK,
     ON_AFTER_PLAY,
     ON_BEFORE_PLAY,
     ON_CHOOSE_COLOR,
@@ -45,6 +47,14 @@ from .state import GameState
 
 STANDARD_TURN_ACTIONS = (PlayAction.type, DrawAction.type)
 ON_DECLARE_UNO = "on_declare_uno"
+ON_CHALLENGE_UNO = "on_challenge_uno"
+
+# awaiting ゲートを介さず常時受理する割り込み・メタ操作（§8 / house-rules §6）。
+# reset は盤面再構築、declare_uno / challenge_uno は「ボタン」的にいつでも押せる
+# （有効性・ペナルティの判定は rules のフックが担う）。
+_ALWAYS_ACCEPTED = frozenset(
+    {ResetAction.type, DeclareUnoAction.type, ChallengeUnoAction.type}
+)
 
 
 class EngineError(Exception):
@@ -78,8 +88,8 @@ def apply_actions(reg: HookRegistry, state: GameState, actions: Iterable[Action]
 
 
 def _check_accepted(state: GameState, action: Action) -> None:
-    if action.type == ResetAction.type:
-        return  # reset は常時受理（§8）
+    if action.type in _ALWAYS_ACCEPTED:
+        return  # reset / declare_uno / challenge_uno は awaiting を介さず常時受理
     allowed = state.awaiting.get(action.player, ())
     if action.type not in allowed:
         raise IllegalAction(
@@ -93,27 +103,42 @@ def _check_accepted(state: GameState, action: Action) -> None:
 
 def _play(reg: HookRegistry, state: GameState, action: PlayAction) -> GameState:
     hand = state.hands[action.player]
-    card = _find_card(hand, action.card_id)
-    if not reg.can_play(Ctx.from_state(state, action=action, card=card, owner=action.player)):
-        raise IllegalAction(f"card_id={action.card_id} は今は出せない")
+    played = tuple(_find_card(hand, cid) for cid in action.card_ids)  # 出す順（末尾=トップ）
+    lead = played[0]
+    who = action.player
+
+    # 先頭カードは場に合法か（can_play, §3.4）
+    if not reg.can_play(_pctx(state, action, lead, played, who)):
+        raise IllegalAction(f"card_id={lead.id} は今は出せない")
+    # 複数枚出しは can_stack ゲート（既定 False＝単数のみ）。ルールが同数字/同記号を許可する
+    if len(played) > 1 and not reg.reduce(CAN_STACK, _pctx(state, action, lead, played, who)):
+        raise IllegalAction("複数枚出しは許可されていない")
 
     state = state.with_awaiting({})  # 手番アクションを消費
-    # 効果(前): カード移動前。top は旧トップ
-    state = reg.transform(
-        ON_BEFORE_PLAY, state, Ctx.from_state(state, action=action, card=card, owner=action.player)
-    )
-    # カードを手札→捨て山へ（engine 機構）
-    hand = state.hands[action.player]
-    new_hand = tuple(c for c in hand if c.id != card.id)
+    # 効果(前): カード移動前。top は旧トップ。card は先頭カード。
+    state = reg.transform(ON_BEFORE_PLAY, state, _pctx(state, action, lead, played, who))
+    # カード群を手札→捨て山へ（出した順に積む、末尾=トップ）
+    hand = state.hands[who]
+    played_ids = {c.id for c in played}
+    new_hand = tuple(c for c in hand if c.id not in played_ids)
     state = state.replace(
-        hands={**state.hands, action.player: new_hand},
-        discard_pile=state.discard_pile + (card,),
+        hands={**state.hands, who: new_hand},
+        discard_pile=state.discard_pile + played,
     )
-    # 効果(後): top は今出したカード
-    state = reg.transform(
-        ON_AFTER_PLAY, state, Ctx.from_state(state, action=action, card=card, owner=action.player)
-    )
-    return _advance_if_idle(reg, state, action.player)
+    # 効果(後): top は最後に出したカード。card はトップ、played_cards は全群。
+    state = reg.transform(ON_AFTER_PLAY, state, _pctx(state, action, played[-1], played, who))
+    return _advance_if_idle(reg, state, who)
+
+
+def _pctx(
+    state: GameState,
+    action: PlayAction,
+    card: CardInstance,
+    played: tuple[CardInstance, ...],
+    who: str,
+) -> Ctx:
+    """play 用の Ctx（card＝注目カード, played_cards＝出す群）。"""
+    return Ctx.from_state(state, action=action, card=card, played_cards=played, owner=who)
 
 
 def _draw(reg: HookRegistry, state: GameState, action: DrawAction) -> GameState:
@@ -141,12 +166,19 @@ def _choose_color(reg: HookRegistry, state: GameState, action: ChooseColorAction
 
 def _declare_uno(reg: HookRegistry, state: GameState, action: DeclareUnoAction) -> GameState:
     # 割り込み（手番を消費しない）: awaiting をクリアせず・手番送りもせず hook だけ回す。
-    # 土台では専用効果を持たず、new_game も declare_uno を awaiting に載せないため通常は
-    # _check_accepted で弾かれる（受理集合を広げるローカルルールが載せて初めて到達）。
-    state = reg.transform(
+    # 常時受理（_ALWAYS_ACCEPTED）で「UNO!」ボタンをいつでも押せる。宣言の有効性
+    # （1枚時のみ有効・枚数増でクリア）は rules の on_declare_uno が判定する（house-rules §6）。
+    return reg.transform(
         ON_DECLARE_UNO, state, Ctx.from_state(state, action=action, owner=action.player)
     )
-    return state
+
+
+def _challenge_uno(reg: HookRegistry, state: GameState, action: ChallengeUnoAction) -> GameState:
+    # 割り込み（手番を消費しない）: 「UNO言ってない!」ボタン。指摘の成否とペナルティ
+    # （成功=相手2枚 / 誤爆=自分2枚, house-rules §6）は rules の on_challenge_uno が担う。
+    return reg.transform(
+        ON_CHALLENGE_UNO, state, Ctx.from_state(state, action=action, owner=action.player)
+    )
 
 
 def _reset(reg: HookRegistry, state: GameState, action: ResetAction) -> GameState:
@@ -165,6 +197,7 @@ _DISPATCH = {
     DrawAction.type: _draw,
     ChooseColorAction.type: _choose_color,
     DeclareUnoAction.type: _declare_uno,
+    ChallengeUnoAction.type: _challenge_uno,
     ResetAction.type: _reset,
 }
 
@@ -238,6 +271,7 @@ __all__ = [
     "IllegalAction",
     "STANDARD_TURN_ACTIONS",
     "ON_DECLARE_UNO",
+    "ON_CHALLENGE_UNO",
     "apply_action",
     "apply_actions",
 ]

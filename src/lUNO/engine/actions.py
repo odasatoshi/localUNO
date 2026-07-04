@@ -64,6 +64,21 @@ def coerce_card_id(value: object) -> int:
     return value
 
 
+def coerce_card_ids(value: object) -> tuple[int, ...]:
+    """複数枚出し用。int の列（list/tuple）を検証してタプル化する。
+
+    非空・要素は int（bool 除外）・重複なし。出す順を保持する（末尾がトップ）。
+    """
+    if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)):
+        raise ActionError("card_ids は int のリストであること")
+    ids = tuple(coerce_card_id(v) for v in value)
+    if not ids:
+        raise ActionError("card_ids は空にできない")
+    if len(set(ids)) != len(ids):
+        raise ActionError("card_ids に重複がある")
+    return ids
+
+
 def coerce_color(value: object) -> Color:
     try:
         return Color(value)
@@ -72,9 +87,11 @@ def coerce_color(value: object) -> Color:
 
 
 def _encode(value: object) -> object:
-    """to_dict 用のスカラ変換。Color は素の文字列に落とす。"""
+    """to_dict 用の変換。Color は素の文字列、タプルは JSON 自然な list に落とす。"""
     if isinstance(value, Color):
         return str(value)
+    if isinstance(value, tuple):
+        return list(value)
     return value
 
 
@@ -130,10 +147,28 @@ class Action:
 @register
 @dataclass(frozen=True)
 class PlayAction(Action):
-    """手札の1枚（CardInstance の ID 指定）を場に出す。"""
+    """手札の1枚以上（同時出し）を場に出す。
 
-    card_id: int = field(metadata={"coerce": coerce_card_id})
+    ``card_ids`` は出す順（末尾がトップ）。単数プレイは要素1個のタプル。複数枚出しの
+    合法性（同数字/同記号など）は rules の ``can_play`` / ``can_stack`` フックが判定する。
+    """
+
+    card_ids: tuple[int, ...] = field(metadata={"coerce": coerce_card_ids})
     type: ClassVar[str] = "play"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not isinstance(self.card_ids, tuple) or not self.card_ids:
+            raise ActionError("card_ids は非空タプルであること")
+        # 重複は物理カードの複製（捨て山に同一カードが2度積まれる）を招くため型レベルで
+        # 弾く。parse 経路(coerce_card_ids)だけでなく直接構築でも不変条件を担保する。
+        if len(set(self.card_ids)) != len(self.card_ids):
+            raise ActionError("card_ids に重複がある")
+
+    @property
+    def card_id(self) -> int:
+        """先頭カード ID（単数プレイの後方互換アクセサ）。"""
+        return self.card_ids[0]
 
 
 @register
@@ -156,9 +191,17 @@ class ChooseColorAction(Action):
 @register
 @dataclass(frozen=True)
 class DeclareUnoAction(Action):
-    """UNO 宣言。"""
+    """UNO 宣言（「UNO!」ボタン）。手番外でも押せる割り込み（house-rules §6）。"""
 
     type: ClassVar[str] = "declare_uno"
+
+
+@register
+@dataclass(frozen=True)
+class ChallengeUnoAction(Action):
+    """UNO 宣言忘れの指摘（「UNO言ってない!」ボタン）。手番外の割り込み（house-rules §6）。"""
+
+    type: ClassVar[str] = "challenge_uno"
 
 
 @register
@@ -196,7 +239,9 @@ __all__ = [
     "DrawAction",
     "ChooseColorAction",
     "DeclareUnoAction",
+    "ChallengeUnoAction",
     "ResetAction",
     "register",
     "parse",
+    "coerce_card_ids",
 ]
