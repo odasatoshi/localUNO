@@ -169,3 +169,18 @@ def test_create_app_stores_session(tmp_path):
 def test_missing_static_returns_404(tmp_path, path):
     client = make_client(tmp_path)
     assert client.get(path).status_code == 404
+
+
+def test_run_invokes_uvicorn_with_app_host_port(monkeypatch):
+    """run() が uvicorn.run にモジュール app・host・port を渡すこと（実バインドの結線）。"""
+    import lUNO.server.app as appmod
+
+    captured = {}
+    monkeypatch.setattr(
+        "uvicorn.run",
+        lambda app, host, port: captured.update(app=app, host=host, port=port),
+    )
+    appmod.run(host="1.2.3.4", port=5555)
+    assert captured["app"] is appmod.app
+    assert captured["host"] == "1.2.3.4"
+    assert captured["port"] == 5555

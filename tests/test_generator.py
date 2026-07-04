@@ -135,9 +135,9 @@ def test_cli_generates_cards(tmp_path, monkeypatch) -> None:
 
     monkeypatch.setattr(cli, "default_output_dir", lambda: tmp_path)
     monkeypatch.setattr(cli, "generate_cards", fake_generate)
-    assert cli.main([]) == 0
+    assert cli.main(["--no-serve"]) == 0
     assert list(tmp_path.glob("*.png"))  # 何か生成された
     # 2 回目は差分ゼロでも正常終了
-    assert cli.main([]) == 0
+    assert cli.main(["--no-serve"]) == 0
     # --regenerate も正常終了
-    assert cli.main(["--regenerate"]) == 0
+    assert cli.main(["--no-serve", "--regenerate"]) == 0
