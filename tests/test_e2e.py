@@ -64,7 +64,12 @@ def _play_full_game(seed: int, max_steps: int = 4000) -> dict:
                     break
                 # error: 次の札を試す（この失敗は自分にだけ届く）
             if not played:
-                sock.send_text(json.dumps({"type": "draw", "player": cur}))
+                # 出せなければ引く。ただしドロー後（#40）は awaiting が [play, pass] に
+                # なり draw 不可なので、引いた札も出せない場合は pass で手番を送る。
+                if "draw" in allowed:
+                    sock.send_text(json.dumps({"type": "draw", "player": cur}))
+                else:
+                    sock.send_text(json.dumps({"type": "pass", "player": cur}))
                 broadcast_into(views)
 
     raise AssertionError(f"{max_steps} 手で決着しなかった（seed={seed}）")
