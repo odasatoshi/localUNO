@@ -171,6 +171,23 @@ def test_missing_static_returns_404(tmp_path, path):
     assert client.get(path).status_code == 404
 
 
+def test_uvicorn_resolves_a_websocket_impl():
+    """uvicorn(ws=auto) が WS プロトコル実装を解決できること（#59 の回帰防止）。
+
+    素の uvicorn には WS 実装が含まれず、実起動時に ``/ws`` が 404 になる。実行時依存に
+    ``websockets`` 等が入っていれば ``ws_protocol_class`` が非 None に解決される。
+    既存 WS テストは Starlette の TestClient（インプロセス実装）を使うため、この実起動
+    ギャップを検知できない。ここで実装導入を担保する。
+    """
+    from uvicorn.config import Config
+
+    from lUNO.server.app import app
+
+    config = Config(app, ws="auto")
+    config.load()
+    assert config.ws_protocol_class is not None
+
+
 def test_run_invokes_uvicorn_with_app_host_port(monkeypatch):
     """run() が uvicorn.run にモジュール app・host・port を渡すこと（実バインドの結線）。"""
     import lUNO.server.app as appmod
