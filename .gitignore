@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# venv / uv
+.venv/
+
+# 初回起動時に生成されるカード画像（生成物のため追跡しない）
+src/lUNO/static/cards/
+
+# OS
+.DS_Store
