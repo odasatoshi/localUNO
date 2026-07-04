@@ -236,18 +236,18 @@ def _advance_if_idle(reg: HookRegistry, state: GameState, actor: str) -> GameSta
     """終局でも応答待ちでもなければ、ターン終了フックを回して既定の手番送りを行う。
 
     区別（§3.6）:
-    - ``winner`` が立っていれば終局 → 何もしない。
+    - ``winner`` が立っている／``is_draw`` なら終局 → 何もしない。
     - ``awaiting`` が非空なら応答待ちで停止（色選択待ち・スキップの自ターン保持など）。
     - どちらでもない（idle）なら ``on_turn_end`` を回し、その結果でも終局/停止でなければ
       二人対戦の既定手番送り（相手へ、受理集合を ``[play, draw]``）を行う。
     """
-    if state.winner is not None:
+    if state.winner is not None or state.is_draw:
         return state
     if state.awaiting:
         return state
-    # ターン終了フック（勝敗判定・ペナルティ等を rules が差し込める配線, §3.2）
+    # ターン終了フック（勝敗判定・山切れ引き分け・ペナルティ等を rules が差し込める配線, §3.2）
     state = reg.transform(ON_TURN_END, state, Ctx.from_state(state, owner=actor))
-    if state.winner is not None or state.awaiting:
+    if state.winner is not None or state.is_draw or state.awaiting:
         return state
     other = state.other_player(actor)
     return state.with_current_player(other).with_awaiting({other: STANDARD_TURN_ACTIONS})
