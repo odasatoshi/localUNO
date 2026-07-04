@@ -23,7 +23,7 @@ def _refresh_declared(state: GameState) -> GameState:
     """手札が1枚でないプレイヤーの宣言済みフラグを解除する（枚数変化で宣言は無効）。"""
     valid = frozenset(p for p in state.uno_declared if len(state.hands.get(p, ())) == 1)
     if valid != state.uno_declared:
-        return state.replace(uno_declared=valid)
+        return state.with_uno_declared(valid)
     return state
 
 
@@ -31,7 +31,7 @@ def declare_uno(state: GameState, ctx: Ctx) -> GameState:
     """「UNO!」: 宣言者の手札が**1枚のときだけ**有効（それ以外は空押し・ペナルティなし）。"""
     player = ctx.action.player
     if len(state.hands.get(player, ())) == 1:
-        return state.replace(uno_declared=state.uno_declared | {player})
+        return state.with_uno_declared(state.uno_declared | {player})
     return state
 
 
