@@ -57,7 +57,69 @@ def test_allows_empty_stdin() -> None:
     assert result.returncode == 0
 
 
-@pytest.mark.parametrize("branch", ["develop", "feat/foo", "fix/bar"])
+# "main" を接頭辞に含む別ブランチを前方一致で誤拒否しないこと（回帰）
+@pytest.mark.parametrize(
+    "branch", ["develop", "feat/foo", "fix/bar", "mainline", "main-x"]
+)
 def test_allows_non_protected_branches(branch: str) -> None:
     result = _run(f"refs/heads/{branch} {_SHA_A} refs/heads/{branch} {_SHA_B}\n")
     assert result.returncode == 0
+
+
+def test_allows_tag_push() -> None:
+    # refs/tags/* は refs/heads/main と非一致 → 許可
+    result = _run(f"refs/tags/v1.0 {_SHA_A} refs/tags/v1.0 {_SHA_B}\n")
+    assert result.returncode == 0
+
+
+def test_blocks_when_any_ref_among_many_is_main() -> None:
+    # 複数 ref のうち1つでも main 宛なら拒否（while ループの肝）
+    stdin = (
+        f"refs/heads/feat/x {_SHA_A} refs/heads/feat/x {_SHA_B}\n"
+        f"refs/heads/main {_SHA_A} refs/heads/main {_SHA_B}\n"
+    )
+    result = _run(stdin)
+    assert result.returncode != 0
+    assert "main" in result.stderr
+
+
+def test_e2e_push_via_core_hookspath(tmp_path: Path) -> None:
+    """実 git push を core.hooksPath 経由で検証（issue #5 完了条件の直接担保）。
+
+    main 宛 push は拒否され、feature 宛 push は成功すること。
+    """
+    git = shutil.which("git")
+    if not git:
+        pytest.skip("git が見つからない")
+
+    remote = tmp_path / "remote.git"
+    subprocess.run([git, "init", "--bare", str(remote)], check=True, capture_output=True)
+
+    work = tmp_path / "work"
+    work.mkdir()
+
+    def g(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [git, "-C", str(work), *args], capture_output=True, text=True, check=check
+        )
+
+    g("init")
+    g("config", "user.email", "test@example.com")
+    g("config", "user.name", "test")
+    # 実運用と同じく実際の .githooks を hooksPath に設定
+    g("config", "core.hooksPath", str(HOOK.parent))
+    g("checkout", "-b", "main")
+    (work / "f.txt").write_text("x")
+    g("add", "-A")
+    g("commit", "-m", "init")
+    g("remote", "add", "origin", str(remote))
+
+    # main への push は拒否される
+    blocked = g("push", "origin", "main", check=False)
+    assert blocked.returncode != 0, "main への push が拒否されなかった"
+    assert "main" in blocked.stderr
+
+    # feature ブランチの push は通る
+    g("checkout", "-b", "feat/x")
+    allowed = g("push", "origin", "feat/x", check=False)
+    assert allowed.returncode == 0, f"feature push が失敗: {allowed.stderr}"
