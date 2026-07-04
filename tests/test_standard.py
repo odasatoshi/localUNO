@@ -25,7 +25,7 @@ from lUNO.engine.cards import (
 from lUNO.engine.engine import IllegalAction, apply_action
 from lUNO.engine.hooks import Ctx, build_registry
 from lUNO.engine.state import GameState
-from lUNO.rules import ENABLED_RULES, registry, setup_game, standard
+from lUNO.rules import ENABLED_RULES, setup_game, standard
 
 P = ("p1", "p2")
 
@@ -77,7 +77,7 @@ def _can_play(reg, st, played, owner="p1"):
 
 
 def test_can_play_color_number_symbol_and_wild():
-    reg = registry()
+    reg = build_registry([standard.RULES])
     st = state_with(p1=(), p2=(), top=card("7", Color.RED, 100))
     assert _can_play(reg, st, card("3", Color.RED, 1)) is True  # 色一致
     assert _can_play(reg, st, card("7", Color.BLUE, 2)) is True  # 記号(数字)一致
@@ -86,7 +86,7 @@ def test_can_play_color_number_symbol_and_wild():
 
 
 def test_can_play_respects_forced_color():
-    reg = registry()
+    reg = build_registry([standard.RULES])
     st = state_with(p1=(), p2=(), top=card(WILD, None, 100)).with_forced_color(Color.RED)
     assert _can_play(reg, st, card("3", Color.RED, 1)) is True
     assert _can_play(reg, st, card("3", Color.BLUE, 2)) is False
@@ -110,7 +110,7 @@ def test_cannot_win_on_wild_restriction():
 
 
 def test_number_card_passes_turn():
-    reg = registry()
+    reg = build_registry([standard.RULES])
     st = state_with(
         p1=(card("5", Color.RED, 1), card("2", Color.RED, 2)),
         p2=(card("9", Color.GREEN, 3),),
@@ -122,7 +122,7 @@ def test_number_card_passes_turn():
 
 
 def test_skip_keeps_turn_with_actor():
-    reg = registry()
+    reg = build_registry([standard.RULES])
     st = state_with(
         p1=(card(SKIP, Color.RED, 1), card("2", Color.RED, 2)),
         p2=(card("9", Color.GREEN, 3),),
@@ -169,7 +169,7 @@ def test_draw2_forces_opponent_draw_then_returns_turn():
 
 
 def test_wild_choose_color_then_pass_turn():
-    reg = registry()
+    reg = build_registry([standard.RULES])
     st = state_with(
         p1=(card(WILD, None, 1), card("5", Color.RED, 2)),
         p2=(card("9", Color.GREEN, 3),),
@@ -187,7 +187,7 @@ def test_wild_choose_color_then_pass_turn():
 
 
 def test_wild_draw4_choose_then_opponent_draws4():
-    reg = registry()
+    reg = build_registry([standard.RULES])
     draw = tuple(card(str(i), Color.BLUE, 10 + i) for i in range(4))
     st = state_with(
         p1=(card(DRAW4, None, 1), card("5", Color.RED, 2)),
@@ -215,7 +215,7 @@ def test_wild_draw4_choose_then_opponent_draws4():
 
 
 def test_play_last_card_wins():
-    reg = registry()
+    reg = build_registry([standard.RULES])
     st = state_with(
         p1=(card("5", Color.RED, 1),),
         p2=(card("9", Color.GREEN, 2),),
@@ -228,7 +228,7 @@ def test_play_last_card_wins():
 
 def test_win_on_skip_closes_awaiting():
     """スキップを最後の1枚で上がると終局が閉じ、その後の行動は受理されない。"""
-    reg = registry()
+    reg = build_registry([standard.RULES])
     st = state_with(
         p1=(card(SKIP, Color.RED, 1),),
         p2=(card("9", Color.GREEN, 2),),
@@ -244,7 +244,7 @@ def test_win_on_skip_closes_awaiting():
 
 def test_win_on_draw2_closes_awaiting_and_pending():
     """ドロー2を最後の1枚で上がると、相手への強制ドローも残さず終局する。"""
-    reg = registry()
+    reg = build_registry([standard.RULES])
     st = state_with(
         p1=(card(DRAW2, Color.RED, 1),),
         p2=(card("9", Color.GREEN, 2),),
@@ -260,7 +260,7 @@ def test_win_on_draw2_closes_awaiting_and_pending():
 
 
 def test_standard_score_counts_loser_hand():
-    reg = registry()
+    reg = build_registry([standard.RULES])
     st = state_with(
         p1=(),
         p2=(card("5", Color.RED, 1), card(SKIP, Color.BLUE, 2), card(WILD, None, 3)),
@@ -273,7 +273,7 @@ def test_standard_score_counts_loser_hand():
 
 
 def test_full_round_play_draw_effect_win():
-    reg = registry()
+    reg = build_registry([standard.RULES])
     st = state_with(
         p1=(card("5", Color.RED, 1), card("2", Color.RED, 2)),
         p2=(card("9", Color.GREEN, 3), card("3", Color.RED, 4)),
