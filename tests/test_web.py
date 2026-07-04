@@ -115,6 +115,10 @@ def test_ws_frontend_play_payload_is_accepted_by_server():
             ws1.send_text(json.dumps(_play_payload_from_app_js(playable["id"])))
             msg = ws1.receive_json()
             assert msg["type"] == "state"  # error でなく state が返る
+            # 完成条件1: 相手画面へ即反映（p1 の1枚出しが p2 の視界に載る）
+            s2 = ws2.receive_json()
+            assert s2["type"] == "state"
+            assert s2["view"]["hand_counts"]["p1"] == 6  # 7 → 6 に反映
 
 
 def test_ws_old_card_id_payload_would_error():
