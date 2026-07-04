@@ -33,8 +33,8 @@ def same_symbol_group(current: bool, ctx: Ctx) -> bool:
     played = ctx.played_cards
     if played is None or len(played) <= 1:
         return current  # 単数出しは can_stack を経由しない（engine が len>1 のみ問う）
-    lead_symbol = played[0].card_type.symbol
-    return all(c.card_type.symbol == lead_symbol for c in played)
+    lead_symbol = played[0].symbol
+    return all(c.symbol == lead_symbol for c in played)
 
 
 def accumulate_extra_draw2(state: GameState, ctx: Ctx) -> GameState:
@@ -42,7 +42,7 @@ def accumulate_extra_draw2(state: GameState, ctx: Ctx) -> GameState:
     played = ctx.played_cards
     if played is None or len(played) <= 1 or state.winner is not None:
         return state
-    n_draw2 = sum(1 for c in played if c.card_type.symbol == DRAW2)
+    n_draw2 = sum(1 for c in played if c.symbol == DRAW2)
     if n_draw2 > 1:
         # standard の apply_effect が最後の Draw2 で +2 済み。残り (n_draw2-1) 枚分を追加。
         return state.with_pending_draw(state.pending_draw + 2 * (n_draw2 - 1))

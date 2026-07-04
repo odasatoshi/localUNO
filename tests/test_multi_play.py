@@ -11,7 +11,7 @@ import random
 import pytest
 
 from lUNO.engine.actions import ChooseColorAction, PlayAction
-from lUNO.engine.cards import DRAW2, SKIP, WILD, CardInstance, CardType, Color
+from lUNO.engine.cards import DRAW2, DRAW4, SKIP, WILD, CardInstance, CardType, Color
 from lUNO.engine.engine import STANDARD_TURN_ACTIONS, IllegalAction, apply_action
 from lUNO.engine.state import GameState
 from lUNO.rules import registry
@@ -106,6 +106,45 @@ def test_single_card_play_still_works():
     out = apply_action(registry(), st, PlayAction("p1", (1,)))
     assert out.discard_pile[-1].id == 1
     assert out.current_player == "p2"
+
+
+def test_multi_draw2_win_is_clean():
+    """2枚の Draw2 で 2→0 上がりすると winner 確定・pending 0・awaiting 空（winner ガード）。"""
+    st = _state(
+        p1=(card(DRAW2, Color.RED, 1), card(DRAW2, Color.BLUE, 2)),
+        p2=(card("4", Color.GREEN, 3),),
+        top=card("7", Color.RED, 4),
+    )
+    out = apply_action(registry(), st, PlayAction("p1", (1, 2)))
+    assert out.winner == "p1"
+    assert out.pending_draw == 0  # 終局で累積はクリア（accumulate は winner ガードで素通り）
+    assert out.awaiting == {}
+
+
+def test_multi_draw2_then_returned_chains():
+    """複数 Draw2 出し（pending 4）→ 受け手が Draw2 1枚で返すと累積継続（4→6）。"""
+    st = _state(
+        p1=(card(DRAW2, Color.RED, 1), card(DRAW2, Color.BLUE, 2), card("9", Color.GREEN, 9)),
+        p2=(card(DRAW2, Color.GREEN, 5), card("4", Color.GREEN, 3)),
+        top=card("7", Color.RED, 4),
+    )
+    after = apply_action(registry(), st, PlayAction("p1", (1, 2)))
+    assert after.pending_draw == 4
+    back = apply_action(registry(), after, PlayAction("p2", (5,)))  # 1枚で返す
+    assert back.pending_draw == 6  # 4 + 2
+    assert back.current_player == "p1"
+    assert set(back.awaiting["p1"]) == {"draw", "play"}
+
+
+def test_wild_and_wild_draw4_cannot_mix():
+    """Wild と Wild Draw4 は別記号のため同時出し不可（§2）。"""
+    st = _state(
+        p1=(card(WILD, None, 1), card(DRAW4, None, 2), card("9", Color.GREEN, 9)),
+        p2=(card("4", Color.GREEN, 3),),
+        top=card("7", Color.RED, 4),
+    )
+    with pytest.raises(IllegalAction):
+        apply_action(registry(), st, PlayAction("p1", (1, 2)))
 
 
 def test_multi_play_lead_must_be_playable():
