@@ -59,6 +59,10 @@ class GameState:
     は読み取り専用ビューへ正規化する。RNG は不変な ``rng_state`` タプルで保持し、
     等価判定にも含める（RNG が発散した2状態を ``==`` が等しいと誤判定しない）。
     捨て山・山札は末尾を「上」とする（Deck 規約に合わせる）。
+
+    注: 直列化は :meth:`player_view` 経由の :meth:`PlayerView.to_dict` を使う。
+    ``hands``/``awaiting`` が ``MappingProxyType`` のため :func:`dataclasses.asdict`
+    は pickle 不能で失敗する。
     """
 
     hands: Mapping[str, tuple[CardInstance, ...]]
@@ -170,6 +174,7 @@ class PlayerView:
 
     ホワイトリスト方式。ここに載っていないもの（山札順序・相手手札中身・RNG）は
     構造上そもそも保持しない。可変 dict は読み取り専用ビューへ正規化する。
+    直列化は :meth:`to_dict` を使う（``MappingProxyType`` のため ``asdict`` は不可）。
     """
 
     you: str
