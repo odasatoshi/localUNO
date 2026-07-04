@@ -36,14 +36,65 @@ def test_declare_uno_at_one_card_sets_flag():
     assert "p1" in out.uno_declared
 
 
-def test_declare_uno_at_two_cards_is_noop():
-    """手札2枚での「UNO!」は空押し（宣言済みにならない・ペナルティなし）。"""
+def test_declare_uno_at_two_cards_penalizes_declarer():
+    """手札2枚での「UNO!」は誤宣言＝本人が2枚引く（宣言済みにもならない, #79）。"""
     st = _state(
         p1=(card("7", Color.RED, 1), card("5", Color.RED, 2)),
         p2=(card("9", Color.GREEN, 3),),
+        draw=(card("1", Color.BLUE, 6), card("2", Color.YELLOW, 7)),
     )
     out = apply(st, DeclareUnoAction("p1"))
+    assert len(out.hands["p1"]) == 2 + 2  # 誤宣言で本人が2枚引く
+    assert "p1" not in out.uno_declared  # 宣言は成立しない
+    assert len(out.hands["p2"]) == 1  # 相手は不変
+
+
+def test_declare_uno_at_two_cards_off_turn_also_penalizes():
+    """手番外の誤宣言も本人が2枚引く（常時受理・#79）。"""
+    st = _state(
+        p1=(card("9", Color.GREEN, 2),),
+        p2=(card("7", Color.RED, 1), card("5", Color.RED, 2)),  # 手番外・2枚
+        current="p1",
+        draw=(card("1", Color.BLUE, 6), card("2", Color.YELLOW, 7)),
+    )
+    out = apply(st, DeclareUnoAction("p2"))
+    assert len(out.hands["p2"]) == 2 + 2  # 手番外でも誤宣言ペナルティ
+    assert "p2" not in out.uno_declared
+
+
+def test_declare_uno_redeclare_when_already_declared_is_noop():
+    """1枚・宣言済みでの再宣言は no-op（正当な状態の再送・ペナルティなし, #79）。"""
+    st = _state(
+        p1=(card("7", Color.RED, 1),),  # 1枚・宣言済み
+        p2=(card("9", Color.GREEN, 3),),
+        draw=(card("1", Color.BLUE, 6), card("2", Color.YELLOW, 7)),
+    ).replace(uno_declared=frozenset({"p1"}))
+    out = apply(st, DeclareUnoAction("p1"))
+    assert "p1" in out.uno_declared
+    assert len(out.hands["p1"]) == 1  # ペナルティなし
+
+
+def test_declare_uno_ignored_after_win():
+    """終局後（上がり）の宣言は無効＝ペナルティも成立もなし（#79）。手札0枚を含む。"""
+    st = _state(
+        p1=(),  # 上がり（0枚）
+        p2=(card("9", Color.GREEN, 3),),
+        draw=(card("1", Color.BLUE, 6), card("2", Color.YELLOW, 7)),
+    ).replace(winner="p1")
+    out = apply(st, DeclareUnoAction("p1"))
+    assert len(out.hands["p1"]) == 0  # 誰も引かない
     assert "p1" not in out.uno_declared
+
+
+def test_declare_uno_at_two_cards_after_win_is_noop():
+    """終局後は手札2枚以上でも誤宣言ペナルティが出ない（枚数に依らず無効, #79）。"""
+    st = _state(
+        p1=(card("7", Color.RED, 1), card("5", Color.RED, 2)),  # 2枚
+        p2=(),  # 上がり
+        draw=(card("1", Color.BLUE, 6), card("2", Color.YELLOW, 7)),
+    ).replace(winner="p2")
+    out = apply(st, DeclareUnoAction("p1"))
+    assert len(out.hands["p1"]) == 2  # 終局後はペナルティなし
 
 
 def test_challenge_success_penalizes_undeclared_opponent():
