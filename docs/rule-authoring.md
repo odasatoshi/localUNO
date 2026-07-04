@@ -52,15 +52,20 @@ handler(state, ctx) -> state
 - 対象: `on_before_play` / `on_after_play` / `on_draw` / `on_turn_end` / `on_choose_color` など、効果適用・手番送り・フェーズ遷移。
 - 前のハンドラが返した state を次が受け取る。永続フィールドの書き換えはすべてここで行う。
 
-**例: ドロー2スタック**（現在の state 値を読み、加算して書き戻す）
+**例: 累積の書き方**（現在の state 値を読み、加算して書き戻す）
 
 ```python
-def draw2_stack(state, ctx):
+# 「前の状態を引き継ぐ」累積は、現在値を読んで書き戻す（重ねるほど積み上がる）
+def accumulate_draw2(state, ctx):
     if ctx.card.symbol != "draw2":
         return state
-    # 現在の pending_draw を読んで +2。重ねるほど積み上がる（シードは常に現在値）
     return state.with_pending_draw(state.pending_draw + 2)
 ```
+
+> 実装との対応（誤解防止）: 標準の Draw2 の累積（`+2`）は `rules/standard.py` の
+> `apply_effect` が担う。ハウスルールの `rules/draw2_stack.py` は `pending_draw` を
+> **触らず**、Draw2 を出された受け手の受理集合に `play` を足して「Draw2 で返せる」よう
+> にするだけ（累積自体は standard 側で積み上がる）。上のコードは累積パターンの説明用。
 
 ## can_play の合成意味論（OR / AND）
 
@@ -116,21 +121,28 @@ def no_draw2_on_draw4(current, ctx):
 効果を1パスで完結できず、プレイヤー入力を待つ場合は `awaiting` を使う（spec.md §3.6）。
 
 1. state トランスフォーマ型フックが、効果適用の途中で `awaiting`（受理可能アクション）を設定して state を返し、そこで停止する。
-2. 対応する Action が来たら、継続フックが残りを適用し、`awaiting` を通常の手番に戻す。
+2. 対応する Action が来たら、継続フックが残りを適用する。**手番送りはエンジンが担う**（応答待ちが解消され `awaiting` が空になると、エンジンが既定で相手へ手番を送る）。ルール側は「停止したい間だけ `awaiting` を立てる／自ターンを保持したいときは自分向けの `awaiting` を立てる」で制御する。
+
+`awaiting` は `{player_id -> (許可アクション名, ...)}` のマップ。差し替えは `state.with_awaiting(...)` を使う（引数はマップ）。
 
 ```python
 # ワイルドの色選択（標準）
 def wild_effect(state, ctx):
     if not ctx.card.is_wild:
         return state
-    # 効果を途中で止め、本人の色選択を待つ
-    return state.with_awaiting(player=ctx.current_player,
-                               allowed_actions=["choose_color"])
+    # 効果を途中で止め、本人の色選択を待つ（自分向けに choose_color だけを受理集合へ）
+    return state.with_awaiting({ctx.current_player: ("choose_color",)})
 
 def on_choose_color(state, ctx):
-    state = state.with_forced_color(ctx.action.color)
-    return state.pass_turn()          # 手番を相手へ戻す
+    # 強制色を確定するだけ。awaiting が空に戻るのでエンジンが相手へ手番を送る。
+    return state.with_forced_color(ctx.action.color)
 ```
+
+> エンジンの手番送りの意味論（`engine/engine.py`）:
+> - 効果適用後に `awaiting` が空なら、エンジンが二人対戦の既定手番送り（相手へ、受理集合を `("play", "draw")`）を行う。
+> - `awaiting` が非空なら停止する（色選択待ちや、2人でのスキップ＝自分向けに `("play","draw")` を立て自ターンを保持、など）。
+> - 終局は `state.with_winner(pid)` で表す（`winner` が立つとエンジンは手番送りしない）。
+> - `pass_turn()` のようなヘルパは無い。手番は「`awaiting` をどう立てるか」で表現する。
 
 スタックやジャンプインも、同じ「`awaiting` を立てて停止 → Action で継続」のライフサイクルに載せる。
 
