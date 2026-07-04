@@ -150,7 +150,12 @@ def _declare_uno(reg: HookRegistry, state: GameState, action: DeclareUnoAction) 
 
 
 def _reset(reg: HookRegistry, state: GameState, action: ResetAction) -> GameState:
-    """盤面を作り直す（§8）。新しい seed は RNG ストリームから決定的に引く。"""
+    """盤面を作り直す（§8）。新しい seed は RNG ストリームから決定的に引く。
+
+    エンジンはルール非依存なので場札めくり（setup）は行わず ``new_game`` で素の初期状態を
+    返す。標準ルールの場札めくりを伴う再戦が要る経路（server/session.py）は ResetAction を
+    横取りして rules の setup を呼ぶ。両者の差異に注意。
+    """
     seed, state = state.with_rng(lambda rng: rng.getrandbits(32))
     return GameState.new_game(state.players, seed)
 
