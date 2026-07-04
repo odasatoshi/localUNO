@@ -180,20 +180,24 @@ def test_index_has_challenge_button():
     assert 'id="challenge-btn"' in INDEX
 
 
-def test_app_js_challenge_uno_wired_and_gated_by_state():
-    """指摘は相手の state（枚数・宣言済み）から出し分け、challenge_uno を送る（#71）。
+def test_app_js_challenge_uno_wired_and_shown_during_play():
+    """指摘は対局中いつでも押せ（誤爆可）、challenge_uno を送る（#71, #76）。
 
-    challenge_uno も awaiting に載らない常時受理アクション。相手 hand_counts / 相手の
-    uno_declared から表示を制御する。gating と wiring を分離検証する。
+    house-rules §6 の駆け引き（リスクを負って指摘。該当しない相手を突けば誤爆で
+    自分が2枚ドロー）を再現するため、相手の枚数によらず対局中は常時表示し、終局
+    (over) のときだけ隠す。成否・ペナルティはサーバが判定（サーバ権威）。
     """
     # wiring: challenge-btn の click ハンドラで challenge_uno を送る
     assert re.search(
         r'getElementById\("challenge-btn"\)\.addEventListener\(\s*"click"', APP_JS
     )
     assert re.search(r'type:\s*"challenge_uno"', APP_JS)
-    # gating 固有: challenge-btn の hidden を「相手の枚数（oppCount）」で出し分ける
-    # 結線（UNO! 側の hand_counts 参照では満たせない＝指摘が相手側を見ることを特定）
-    assert re.search(r'toggleClass\(\s*[^;]*?challenge-btn[^;]*?oppCount', APP_JS, re.S)
+    # gating: challenge-btn の hidden は終局(over)のみで制御する
+    assert re.search(
+        r'toggleClass\(\s*[^;]*?challenge-btn[^;]*?"hidden"[^;]*?over', APP_JS, re.S
+    )
+    # 相手枚数(oppCount)には紐付けない（誤爆を許容＝該当時のみの安全ゲートを廃止）
+    assert not re.search(r'toggleClass\(\s*[^;]*?challenge-btn[^;]*?oppCount', APP_JS, re.S)
 
 
 # --- WS 往復（フロントが送る実ペイロードがサーバと整合するか） ---------------
