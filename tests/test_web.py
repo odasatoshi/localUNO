@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -68,7 +69,7 @@ def test_app_js_renders_playerview_and_uses_card_images():
 
 def test_app_js_sends_actions_as_json():
     assert "JSON.stringify" in APP_JS
-    for action_type in ("play", "draw", "choose_color", "reset"):
+    for action_type in ("play", "draw", "pass", "choose_color", "reset"):
         assert action_type in APP_JS
 
 
@@ -122,6 +123,34 @@ def test_app_js_shows_selection_order_and_count():
     # 「出す」ボタンの有効/無効を一元管理（自分の番 state.canPlay かつ 1 枚以上）
     assert "updatePlayButton" in APP_JS
     assert "state.canPlay" in APP_JS
+
+
+def test_index_has_pass_button():
+    """ドロー後にパスを送る導線（パスボタン）が UI にある（#64）。"""
+    assert 'id="pass-btn"' in INDEX
+
+
+def test_app_js_pass_button_wired_and_gated_by_awaiting():
+    """パスボタンが pass を送り（click 結線）、awaiting に応じて活性制御される（#64）。
+
+    サーバは自主ドロー後に awaiting=[play, pass] にして手番を保持する。この pass を
+    送る手段が UI に無いと、引いた札を出せない時に手番を進められず詰む（回帰防止）。
+
+    gating（無効化）と wiring（click→送信）を**分離して**検証する。無効化行
+    ``pass-btn").disabled = !allowed.includes("pass")`` は文字列 ``"pass"`` /
+    ``getElementById("pass-btn")`` / ``includes("pass")`` を単独で満たすため、緩い
+    部分一致では click ハンドラが消えても素通りする（本 PR の主眼である結線退行を
+    捕捉できない）。そこで各行に特異なパターンで照合する。
+    """
+    # gating: awaiting に pass が無ければ無効化（draw/play ボタンと同じ受理集合連動）
+    assert re.search(
+        r'getElementById\("pass-btn"\)\.disabled\s*=\s*!allowed\.includes\("pass"\)', APP_JS
+    )
+    # wiring: pass-btn の click ハンドラが存在する（無効化行だけでは満たせない）
+    assert re.search(r'getElementById\("pass-btn"\)\.addEventListener\(\s*"click"', APP_JS)
+    # wiring: その送信ペイロードが pass アクション（オブジェクトリテラル形。
+    # includes("pass") とは別物で、click 結線が消えれば失われる）
+    assert re.search(r'type:\s*"pass"', APP_JS)
 
 
 # --- WS 往復（フロントが送る実ペイロードがサーバと整合するか） ---------------
@@ -196,6 +225,32 @@ def test_ws_multi_card_play_is_accepted_and_last_becomes_top():
             s2 = ws2.receive_json()
             assert s2["type"] == "state"
             assert s2["view"]["hand_counts"]["p1"] == 7 - len(group)
+
+
+def test_ws_pass_after_voluntary_draw_advances_turn():
+    """自主ドロー後、フロントが送る pass ペイロードで手番が相手へ進む（#64 E2E）。
+
+    パスの導線が無いと、引いた札が場に出せない時に手番を進められず詰む。ここで
+    UI が送る ``{type:"pass"}`` がサーバに受理され、手番が相手へ送られることを固定する。
+    """
+    client = deterministic_client()
+    with client.websocket_connect("/ws") as ws1:
+        w1 = ws1.receive_json()
+        assert w1["view"]["current_player"] == "p1"
+        with client.websocket_connect("/ws") as ws2:
+            ws2.receive_json()
+            # p1 が自主ドロー（1枚）→ 手番保持のまま awaiting に pass が入る
+            ws1.send_text(json.dumps({"type": "draw", "player": "p1"}))
+            after_draw = ws1.receive_json()
+            ws2.receive_json()
+            assert after_draw["view"]["current_player"] == "p1"
+            assert "pass" in after_draw["view"]["awaiting"]["p1"]
+            # UI が送る pass ペイロードで手番が p2 へ進む
+            ws1.send_text(json.dumps({"type": "pass", "player": "p1"}))
+            passed = ws1.receive_json()
+            ws2.receive_json()
+            assert passed["type"] == "state"
+            assert passed["view"]["current_player"] == "p2"
 
 
 def test_ws_reconnect_restores_hand_via_token():
