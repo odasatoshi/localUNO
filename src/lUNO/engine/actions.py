@@ -206,6 +206,14 @@ class ChallengeUnoAction(Action):
 
 @register
 @dataclass(frozen=True)
+class PassAction(Action):
+    """ドロー後に「引いた札を出さずにパスする」（house-rules §7）。受理は awaiting 依存。"""
+
+    type: ClassVar[str] = "pass"
+
+
+@register
+@dataclass(frozen=True)
 class ResetAction(Action):
     """盤面のリセット／新規対戦（spec §8）。"""
 
@@ -240,6 +248,7 @@ __all__ = [
     "ChooseColorAction",
     "DeclareUnoAction",
     "ChallengeUnoAction",
+    "PassAction",
     "ResetAction",
     "register",
     "parse",
