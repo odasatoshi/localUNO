@@ -27,7 +27,7 @@ engine 非改修（rules/ 完結）で、engine の次の性質だけを使う:
 
 from __future__ import annotations
 
-from ..engine.hooks import CAN_PLAY, ON_AFTER_PLAY, ON_TURN_END, Ctx, Rule
+from ..engine.hooks import CAN_PLAY, CAN_STACK, ON_AFTER_PLAY, ON_TURN_END, Ctx, Rule
 from ..engine.state import GameState
 
 _TURN = ("play", "draw")
@@ -52,6 +52,19 @@ def only_exact_off_turn(current: bool, ctx: Ctx) -> bool:
             return False
         if not card.symbol.isdigit():  # 特殊札の手番外割り込みは土台対象外
             return False
+    return current
+
+
+def no_stack_off_turn(current: bool, ctx: Ctx) -> bool:
+    """手番外の割り込みは単数のみに限る（制限）。
+
+    複数枚出し（multi_play）併用時、手番外で「先頭が完全一致なら同記号の非一致札も群で
+    出せる」すり抜けを防ぐ。手番外プレイの can_stack を False にして群での割り込みを却下する。
+    手番中の複数枚出しには干渉しない。
+    """
+    action = ctx.action
+    if action is not None and action.player != ctx.current_player:
+        return False
     return current
 
 
@@ -86,6 +99,7 @@ def enable_jump_in(state: GameState, ctx: Ctx) -> GameState:
 
 RULES: Rule = {
     CAN_PLAY: only_exact_off_turn,
+    CAN_STACK: no_stack_off_turn,  # 手番外は単数のみ（multi_play 併用時の群すり抜け防止）
     ON_AFTER_PLAY: claim_turn_on_jump_in,
     ON_TURN_END: enable_jump_in,
 }

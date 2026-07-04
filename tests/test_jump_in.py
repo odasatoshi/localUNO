@@ -193,8 +193,24 @@ def test_jump_in_works_in_full_enabled_stack():
         apply_action(r, st2, PlayAction("p1", card_ids=(1,)))
 
 
-def test_jump_in_is_pure_rules_no_engine_hooks_beyond_public():
-    """jump_in は公開フック名（can_play/on_after_play/on_turn_end）だけで表現される。"""
-    from lUNO.engine.hooks import CAN_PLAY, ON_AFTER_PLAY, ON_TURN_END
+def test_off_turn_group_play_rejected_with_multi_play():
+    """multi_play 併用でも、手番外は単数のみ（群での非一致札すり抜けを却下）。"""
+    from lUNO.rules import multi_play
 
-    assert set(jump_in.RULES.keys()) == {CAN_PLAY, ON_AFTER_PLAY, ON_TURN_END}
+    r = build_registry([standard.RULES, multi_play.RULES, jump_in.RULES])
+    top = card("5", Color.RED, 10)
+    st = state_with_jump_slot(
+        # 先頭 赤5 は完全一致だが、青5（色違い）を群で巻き込もうとする
+        p1=(card("5", Color.RED, 1), card("5", Color.BLUE, 2), card("9", Color.GREEN, 5)),
+        p2=(card("3", Color.GREEN, 3),),
+        top=top,
+    )
+    with pytest.raises(IllegalAction):
+        apply_action(r, st, PlayAction("p1", card_ids=(1, 2)))  # 手番外の複数枚出しは不可
+
+
+def test_jump_in_is_pure_rules_no_engine_hooks_beyond_public():
+    """jump_in は公開フック名だけで表現される（engine 非改修）。"""
+    from lUNO.engine.hooks import CAN_PLAY, CAN_STACK, ON_AFTER_PLAY, ON_TURN_END
+
+    assert set(jump_in.RULES.keys()) == {CAN_PLAY, CAN_STACK, ON_AFTER_PLAY, ON_TURN_END}
