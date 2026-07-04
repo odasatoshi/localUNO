@@ -115,6 +115,31 @@ main {
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
 }
 
+/* カードと順序バッジを重ねるためのラッパー */
+.card-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+/* 選択順バッジ（先頭＝リード / トップ＝新しい捨て札 / 連番） */
+.order-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 1.4rem;
+  padding: 0 0.35rem;
+  height: 1.4rem;
+  line-height: 1.4rem;
+  text-align: center;
+  border-radius: 0.7rem;
+  background: var(--accent);
+  color: #1a1a1a;
+  font-size: 0.75rem;
+  font-weight: bold;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
 .forced-color {
   font-weight: bold;
   text-transform: uppercase;

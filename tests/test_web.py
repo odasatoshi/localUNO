@@ -108,6 +108,20 @@ def test_app_js_supports_multi_select_play():
     assert "card_ids: [card.id]" not in APP_JS
 
 
+def test_app_js_shows_selection_order_and_count():
+    """選択順の可視化（先頭/末尾/連番バッジ）・枚数表示・空選択の無効化（#63）。"""
+    # 順序バッジと先頭/末尾ラベル（どれがリードでどれが新トップか分かる）
+    assert "order-badge" in APP_JS
+    assert "roleLabel" in APP_JS
+    assert "先頭" in APP_JS
+    assert "トップ" in APP_JS
+    # 「出す（N枚）」の枚数表示
+    assert "出す（" in APP_JS
+    # 「出す」ボタンの有効/無効を一元管理（自分の番 state.canPlay かつ 1 枚以上）
+    assert "updatePlayButton" in APP_JS
+    assert "state.canPlay" in APP_JS
+
+
 # --- WS 往復（フロントが送る実ペイロードがサーバと整合するか） ---------------
 
 
