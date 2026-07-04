@@ -147,7 +147,10 @@ def test_reverse_acts_as_skip_in_two_player():
 
 
 def test_draw2_forces_opponent_draw_then_returns_turn():
-    reg = registry()
+    # standard 単体の挙動を担保する（active な ENABLED_RULES ではローカルルール #38
+    # draw2_stack が受理集合に play を足し「Draw2 で返せる」。
+    # active 側は test_draw2_stack が担保）。
+    reg = build_registry([standard.RULES])
     st = state_with(
         p1=(card(DRAW2, Color.RED, 1), card("5", Color.BLUE, 2)),
         p2=(card("9", Color.GREEN, 3),),
@@ -157,7 +160,7 @@ def test_draw2_forces_opponent_draw_then_returns_turn():
     after = apply_action(reg, st, PlayAction("p1", (1,)))
     assert after.pending_draw == 2
     assert after.current_player == "p2"
-    assert after.awaiting == {"p2": ("draw",)}  # 相手は引くのみ
+    assert after.awaiting == {"p2": ("draw",)}  # standard 単体では相手は引くのみ
 
     drawn = apply_action(reg, after, DrawAction("p2"))
     assert len(drawn.hands["p2"]) == 1 + 2  # 2枚引いた
