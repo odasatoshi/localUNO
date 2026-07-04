@@ -140,6 +140,8 @@ function render(view) {
   const allowed = (view.awaiting && view.awaiting[me]) || [];
   document.getElementById("draw-btn").disabled = !allowed.includes("draw");
   state.canPlay = allowed.includes("play");
+  // パスはドロー後フェーズ（awaiting に pass）でのみ活性。引いた札を出さず手番を送る。
+  document.getElementById("pass-btn").disabled = !allowed.includes("pass");
   toggleClass(document.getElementById("color-picker"), "hidden", !allowed.includes("choose_color"));
   // 選択（クリア済み）を反映して「出す」ボタンとバッジを初期化。
   refreshSelectionUI();
@@ -221,6 +223,9 @@ function wireControls() {
   document.getElementById("play-btn").addEventListener("click", playSelected);
   document.getElementById("draw-btn").addEventListener("click", () => {
     send({ type: "draw", player: state.me });
+  });
+  document.getElementById("pass-btn").addEventListener("click", () => {
+    send({ type: "pass", player: state.me });
   });
   document.getElementById("reset-btn").addEventListener("click", () => {
     send({ type: "reset", player: state.me });
