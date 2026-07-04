@@ -131,6 +131,39 @@ def test_ws_old_card_id_payload_would_error():
         assert ws1.receive_json()["type"] == "error"
 
 
+def test_ws_multi_card_play_is_accepted_and_last_becomes_top():
+    """複数枚出し（card_ids に複数ID）が WS 経由で受理され、末尾カードがトップになること。
+
+    engine/rules/actions では #35 で対応済みだが、WS(session→app) を通す結合テストが
+    欠けていた。ここで「複数 card_ids を送れる」ことに加え、card_ids の順序契約
+    （先頭＝リード・末尾＝新トップ, house-rules §2 / multi_play）を固定する。
+    """
+    for seed in range(1, 80):
+        client = deterministic_client(seed=seed)
+        with client.websocket_connect("/ws") as ws1:
+            welcome = ws1.receive_json()
+            group = _find_multi_group(
+                welcome["view"]["your_hand"], welcome["view"]["top_of_pile"]
+            )
+            if group is None:
+                continue
+            with client.websocket_connect("/ws") as ws2:
+                ws2.receive_json()
+                ws1.send_text(
+                    json.dumps({"type": "play", "player": "p1", "card_ids": group})
+                )
+                msg = ws1.receive_json()
+                assert msg["type"] == "state"  # error でなく state が返る
+                # 順序契約: 末尾に置いたカードが新しい捨て山トップになる
+                assert msg["view"]["top_of_pile"]["id"] == group[-1]
+                # 相手視界へ即反映: p1 の手札は 7 → 5（2枚出し）
+                s2 = ws2.receive_json()
+                assert s2["type"] == "state"
+                assert s2["view"]["hand_counts"]["p1"] == 7 - len(group)
+            return
+    pytest.skip("seed 1..79 に複数枚出し可能な初手が見つからなかった")
+
+
 def test_ws_reconnect_restores_hand_via_token():
     """完成条件2: ?token= 再接続で手札が復元される（実挙動）。"""
     client = deterministic_client()
@@ -152,4 +185,24 @@ def _find_playable(hand, top):
             return c
         if top is not None and (c["color"] == top["color"] or c["symbol"] == top["symbol"]):
             return c
+    return None
+
+
+def _find_multi_group(hand, top):
+    """先頭が top に合法（非ワイルド）で、同記号の仲間が1枚以上ある群を探す。
+
+    返り値は出す順の card_id リスト ``[先頭, 仲間]``。無ければ None。
+    複数枚出しは「全カードが先頭と同記号」（house-rules §2 / multi_play）。
+    ワイルド先頭は choose_color を要するためテストでは避ける。
+    """
+    for lead in hand:
+        if lead["color"] is None:  # wild は避ける
+            continue
+        if top is None or not (
+            lead["color"] == top["color"] or lead["symbol"] == top["symbol"]
+        ):
+            continue
+        mates = [c for c in hand if c["id"] != lead["id"] and c["symbol"] == lead["symbol"]]
+        if mates:
+            return [lead["id"], mates[0]["id"]]
     return None
