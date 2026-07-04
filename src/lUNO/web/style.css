@@ -108,11 +108,41 @@ main {
   transform: translateY(-6px);
 }
 
-/* 選択中（複数枚出しのトグル選択）: 浮かせて枠でハイライト */
+/* 選択中（複数枚出しのトグル選択）: 枠でハイライト */
 .hand .card.selected {
-  transform: translateY(-10px);
   outline: 3px solid var(--accent);
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+/* カードと順序バッジを重ねるためのラッパー */
+.card-wrap {
+  position: relative;
+  display: inline-flex;
+  transition: transform 0.08s ease;
+}
+
+/* 選択したカードは wrap ごと持ち上げ、バッジも一緒に追従させる */
+.card-wrap:has(.card.selected) {
+  transform: translateY(-10px);
+}
+
+/* 選択順バッジ（先頭＝リード / トップ＝新しい捨て札 / 連番） */
+.order-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 1.4rem;
+  padding: 0 0.35rem;
+  height: 1.4rem;
+  line-height: 1.4rem;
+  text-align: center;
+  border-radius: 0.7rem;
+  background: var(--accent);
+  color: #1a1a1a;
+  font-size: 0.75rem;
+  font-weight: bold;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
 }
 
 .forced-color {

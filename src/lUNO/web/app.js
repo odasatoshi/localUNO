@@ -21,6 +21,8 @@ const state = {
   // 先頭＝リード（場に合法な必要あり）、末尾＝出した後の新しい捨て山トップ。
   // サーバから新しい state を受けて再描画するたびにクリアする（stale 防止）。
   selected: [],
+  // 直近の awaiting に play が含まれるか（「出す」ボタンの有効条件の一つ）。
+  canPlay: false,
 };
 
 // --- 通信 ------------------------------------------------------------------
@@ -120,17 +122,27 @@ function render(view) {
   const hand = document.getElementById("hand");
   hand.replaceChildren();
   (view.your_hand || []).forEach((card) => {
+    // カードは wrap で包み、選択順バッジ（先頭/末尾/連番）を重ねる（#63）。
+    const wrap = document.createElement("div");
+    wrap.className = "card-wrap";
+    wrap.dataset.cardId = String(card.id);
     const el = cardImg(card);
     // タップ＝選択トグル。まとめて出すのは「出す」ボタン（複数枚出し, #35/#62）。
-    el.addEventListener("click", () => toggleSelect(card.id, el));
-    hand.appendChild(el);
+    el.addEventListener("click", () => toggleSelect(card.id));
+    const badge = document.createElement("span");
+    badge.className = "order-badge hidden";
+    wrap.appendChild(el);
+    wrap.appendChild(badge);
+    hand.appendChild(wrap);
   });
 
   // 受理集合に応じて操作可否と色選択の表示を切り替える（判定ではなく UI のみ）
   const allowed = (view.awaiting && view.awaiting[me]) || [];
   document.getElementById("draw-btn").disabled = !allowed.includes("draw");
-  document.getElementById("play-btn").disabled = !allowed.includes("play");
+  state.canPlay = allowed.includes("play");
   toggleClass(document.getElementById("color-picker"), "hidden", !allowed.includes("choose_color"));
+  // 選択（クリア済み）を反映して「出す」ボタンとバッジを初期化。
+  refreshSelectionUI();
 
   // 手番・勝敗の表示
   const banner = document.getElementById("banner");
@@ -148,15 +160,53 @@ function render(view) {
 
 // タップされたカードを選択リストに足す/外す。タップ順＝送信順（先頭=リード,
 // 末尾=トップ）。一度外して再度タップすると末尾に付き直す。可否判定はサーバ。
-function toggleSelect(cardId, el) {
+function toggleSelect(cardId) {
   const idx = state.selected.indexOf(cardId);
   if (idx === -1) {
     state.selected.push(cardId);
-    el.classList.add("selected");
   } else {
     state.selected.splice(idx, 1);
-    el.classList.remove("selected");
   }
+  refreshSelectionUI();
+}
+
+// 選択順における各位置のラベル。先頭＝場に合わせるリード、末尾＝出した後に
+// 新しい捨て山トップになる札。中間は連番で並びを示す。
+function roleLabel(pos, total) {
+  if (total === 1) return "先頭=トップ";
+  if (pos === 0) return "先頭";
+  if (pos === total - 1) return "トップ";
+  return String(pos + 1);
+}
+
+// 選択状態（ハイライト・順序バッジ・「出す」ボタン）を現在の state.selected から
+// 描き直す。full render はしない（サーバ状態でのみ選択はクリアされる）。
+function refreshSelectionUI() {
+  const total = state.selected.length;
+  document.querySelectorAll("#hand .card-wrap").forEach((wrap) => {
+    const id = Number(wrap.dataset.cardId);
+    const pos = state.selected.indexOf(id);
+    const img = wrap.querySelector(".card");
+    const badge = wrap.querySelector(".order-badge");
+    if (pos === -1) {
+      img.classList.remove("selected");
+      badge.textContent = "";
+      toggleClass(badge, "hidden", true);
+    } else {
+      img.classList.add("selected");
+      badge.textContent = roleLabel(pos, total);
+      toggleClass(badge, "hidden", false);
+    }
+  });
+  updatePlayButton();
+}
+
+// 「出す」ボタンの表示（選択枚数）と有効/無効（自分の番かつ 1 枚以上選択）。
+function updatePlayButton() {
+  const n = state.selected.length;
+  const btn = document.getElementById("play-btn");
+  btn.textContent = n > 0 ? `出す（${n}枚）` : "出す";
+  btn.disabled = !state.canPlay || n === 0;
 }
 
 // 選択したカードを選択順に card_ids へ入れて出す。空なら何もしない。
