@@ -18,10 +18,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        # setup-uv は v8 でメジャー/マイナータグの発行を廃止（供給チェーン対策）。
+        # @v8 は解決不能のためフルバージョンにピンする（更新は Dependabot 等で追う）。
+        uses: astral-sh/setup-uv@v8.2.0
         with:
           enable-cache: true
 
