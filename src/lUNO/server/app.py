@@ -12,8 +12,8 @@
 メッセージ規約:
 - server→client: ``{"type":"welcome","token","player_id","view":{...}}`` 接続時／
   ``{"type":"state","view":{...}}`` 状態更新時／``{"type":"error","message":...}``。
-- client→server: Action の JSON（``{"type":"play","player":"p1","card_id":N}`` 等）。
-  再接続は ``/ws?token=<token>`` のクエリでトークンを渡す。
+- client→server: Action の JSON（``{"type":"play","player":"p1","card_ids":[N]}`` 等。
+  複数枚出し対応で ``card_ids`` はリスト, #35）。再接続は ``/ws?token=<token>``。
 """
 
 from __future__ import annotations
