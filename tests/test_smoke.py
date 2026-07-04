@@ -35,8 +35,9 @@ def test_cli_version_matches_package(capsys: pytest.CaptureFixture[str]) -> None
 
 
 def test_cli_main_returns_zero() -> None:
-    assert main([]) == 0
+    # --no-serve: 画像生成のみ（サーバはブロックするので起動しない）
+    assert main(["--no-serve"]) == 0
 
 
 def test_cli_main_regenerate_flag() -> None:
-    assert main(["--regenerate"]) == 0
+    assert main(["--no-serve", "--regenerate"]) == 0
