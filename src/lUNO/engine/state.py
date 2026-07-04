@@ -75,6 +75,10 @@ class GameState:
     pending_draw: int = 0
     awaiting: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     winner: str | None = None  # 終局（上がり）表現。None=進行中（§3.6 の idle と区別する）
+    # UNO 宣言済みのプレイヤー集合（house-rules §6）。手札が1枚の手で立て、枚数が
+    # 増えたらクリアする（管理は state トランスフォーマ＝ルール側、§3.2）。frozenset
+    # なので不変・ハッシュ可能で等価判定に含まれる。
+    uno_declared: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         # frozen をすり抜ける可変 dict を読み取り専用ビューへ（§3.2 の所有権を担保）
@@ -118,6 +122,10 @@ class GameState:
 
     def with_winner(self, winner: str | None) -> GameState:
         return self.replace(winner=winner)
+
+    def with_uno_declared(self, players: Iterable[str]) -> GameState:
+        """UNO 宣言済みプレイヤー集合を差し替える（house-rules §6）。"""
+        return self.replace(uno_declared=frozenset(players))
 
     def with_awaiting(self, awaiting: Mapping[str, Iterable[str]]) -> GameState:
         """受理可能アクションのマップを差し替える（値はタプル化して不変化）。"""
@@ -192,6 +200,7 @@ class PlayerView:
     current_player: str
     awaiting: Mapping[str, tuple[str, ...]]
     winner: str | None
+    uno_declared: frozenset[str]
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "hand_counts", _readonly(self.hand_counts))
@@ -212,6 +221,7 @@ class PlayerView:
             "current_player": self.current_player,
             "awaiting": {pid: list(actions) for pid, actions in self.awaiting.items()},
             "winner": self.winner,
+            "uno_declared": sorted(self.uno_declared),
         }
 
 
@@ -219,7 +229,8 @@ def player_view(state: GameState, player_id: str) -> PlayerView:
     """``GameState -> PlayerView`` のホワイトリスト純関数（spec §5）。
 
     公開するのは: 捨て山トップ・強制色・方向・累積ドロー・手番・awaiting・各手札枚数・
-    山札残り枚数、および**本人の手札の中身のみ**。山札の順序/中身、相手手札の中身、
+    山札残り枚数・UNO 宣言済み集合（指摘の判定に必要、house-rules §6）、および
+    **本人の手札の中身のみ**。山札の順序/中身、相手手札の中身、
     RNG は載せない（デフォルト秘匿）。漏れ防止の本質は「PlayerView が秘匿対象の
     フィールドを構造的に持たない」ホワイトリスト設計にある。
     """
@@ -237,6 +248,7 @@ def player_view(state: GameState, player_id: str) -> PlayerView:
         current_player=state.current_player,
         awaiting=dict(state.awaiting),
         winner=state.winner,
+        uno_declared=state.uno_declared,
     )
 
 

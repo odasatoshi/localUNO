@@ -15,6 +15,7 @@ import pytest
 from lUNO.engine.actions import (
     Action,
     ActionError,
+    ChallengeUnoAction,
     ChooseColorAction,
     DeclareUnoAction,
     DrawAction,
@@ -27,10 +28,12 @@ from lUNO.engine.actions import (
 from lUNO.engine.cards import Color
 
 ALL_ACTIONS = [
-    PlayAction(player="p1", card_id=5),
+    PlayAction(player="p1", card_ids=(5,)),
+    PlayAction(player="p1", card_ids=(5, 7, 9)),  # 複数枚出し
     DrawAction(player="p1"),
     ChooseColorAction(player="p1", color=Color.RED),
     DeclareUnoAction(player="p2"),
+    ChallengeUnoAction(player="p2"),
     ResetAction(player="p1"),
 ]
 
@@ -51,13 +54,28 @@ def test_roundtrip_json(action: Action):
 
 
 def test_to_dict_shape():
-    """to_dict は type と各フィールドを含む。"""
-    assert PlayAction(player="p1", card_id=5).to_dict() == {
+    """to_dict は type と各フィールドを含む（card_ids は list で出力）。"""
+    assert PlayAction(player="p1", card_ids=(5, 7)).to_dict() == {
         "type": "play",
         "player": "p1",
-        "card_id": 5,
+        "card_ids": [5, 7],
     }
     assert DrawAction(player="p2").to_dict() == {"type": "draw", "player": "p2"}
+
+
+def test_play_card_id_property_is_first():
+    """単数プレイの後方互換アクセサ card_id は先頭カード。"""
+    assert PlayAction(player="p1", card_ids=(5, 7)).card_id == 5
+
+
+def test_reject_empty_card_ids():
+    with pytest.raises(ActionError):
+        PlayAction(player="p1", card_ids=())
+
+
+def test_reject_duplicate_card_ids():
+    with pytest.raises(ActionError):
+        parse({"type": "play", "player": "p1", "card_ids": [5, 5]})
 
 
 def test_choose_color_serializes_color_as_str():
@@ -71,8 +89,8 @@ def test_choose_color_serializes_color_as_str():
 
 
 def test_parse_accepts_json_string():
-    a = parse('{"type": "play", "player": "p1", "card_id": 7}')
-    assert a == PlayAction(player="p1", card_id=7)
+    a = parse('{"type": "play", "player": "p1", "card_ids": [7]}')
+    assert a == PlayAction(player="p1", card_ids=(7,))
 
 
 def test_parse_accepts_bytes():
@@ -106,7 +124,7 @@ def test_reject_missing_type():
 
 def test_reject_missing_required_field():
     with pytest.raises(ActionError):
-        parse({"type": "play", "player": "p1"})  # card_id 欠落
+        parse({"type": "play", "player": "p1"})  # card_ids 欠落
 
 
 def test_reject_extra_field():
@@ -114,15 +132,17 @@ def test_reject_extra_field():
         parse({"type": "draw", "player": "p1", "bogus": 1})
 
 
-def test_reject_wrong_type_card_id():
+def test_reject_wrong_type_card_ids():
     with pytest.raises(ActionError):
-        parse({"type": "play", "player": "p1", "card_id": "5"})
+        parse({"type": "play", "player": "p1", "card_ids": "5"})  # 文字列は不可
+    with pytest.raises(ActionError):
+        parse({"type": "play", "player": "p1", "card_ids": [5, "x"]})  # 要素が非int
 
 
 def test_reject_bool_card_id():
-    """bool は int のサブクラスだが card_id としては弾く。"""
+    """bool は int のサブクラスだが card_ids の要素としては弾く。"""
     with pytest.raises(ActionError):
-        parse({"type": "play", "player": "p1", "card_id": True})
+        parse({"type": "play", "player": "p1", "card_ids": [True]})
 
 
 def test_reject_invalid_color():

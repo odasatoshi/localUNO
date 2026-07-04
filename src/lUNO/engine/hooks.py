@@ -37,6 +37,9 @@ from .state import GameState
 
 # 値リデューサ型
 CAN_PLAY = "can_play"
+# 複数枚出しの合法性（先頭以降のカードを許可するか）。シード False＝既定は単数のみ。
+# ローカルルール（複数枚出し）が同数字/同記号などの許可を足す（house-rules §2）。
+CAN_STACK = "can_stack"
 SCORE = "score"
 # state トランスフォーマ型
 ON_BEFORE_PLAY = "on_before_play"
@@ -46,7 +49,7 @@ ON_TURN_END = "on_turn_end"
 ON_CHOOSE_COLOR = "on_choose_color"
 
 # シードが固定定数の値リデューサ（§3.2）。ここに無い値リデューサは呼び出し側が seed を渡す。
-VALUE_SEEDS: dict[str, Any] = {CAN_PLAY: False, SCORE: 0}
+VALUE_SEEDS: dict[str, Any] = {CAN_PLAY: False, CAN_STACK: False, SCORE: 0}
 
 
 @dataclass(frozen=True)
@@ -63,6 +66,10 @@ class Ctx:
     card: CardInstance | None = None
     hand: tuple[CardInstance, ...] | None = None
     top_of_pile: CardInstance | None = None
+    played_cards: tuple[CardInstance, ...] | None = None
+    """複数枚出しで実際に出す（出した）カード群。単数出しは要素1個。can_stack 判定と
+    効果適用（Draw2 累積など、house-rules §2）が参照する。``card`` は先頭または
+    トップ（呼び出し側が指定）。"""
 
     @classmethod
     def from_state(
@@ -71,12 +78,14 @@ class Ctx:
         *,
         action: Action | None = None,
         card: CardInstance | None = None,
+        played_cards: tuple[CardInstance, ...] | None = None,
         owner: str | None = None,
     ) -> Ctx:
         """GameState から ctx を組み立てる（配線ミス・state との二重管理を防ぐ）。
 
         ``current_player`` / ``top_of_pile`` は state を権威として自動で埋める。``owner``
         は評価対象カードの持ち主（手番外評価では相手を指定）。既定は手番プレイヤー。
+        ``played_cards`` は複数枚出しの対象群（あれば）。
         """
         who = state.current_player if owner is None else owner
         if who not in state.hands:
@@ -88,6 +97,7 @@ class Ctx:
             card=card,
             hand=state.hands.get(who),
             top_of_pile=state.top_of_pile(),
+            played_cards=played_cards,
         )
 
 
@@ -207,6 +217,7 @@ def build_registry(rules: Iterable[Rule], seeds: Mapping[str, Any] | None = None
 
 __all__ = [
     "CAN_PLAY",
+    "CAN_STACK",
     "SCORE",
     "ON_BEFORE_PLAY",
     "ON_AFTER_PLAY",

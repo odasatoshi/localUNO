@@ -231,6 +231,18 @@ def test_winner_default_none_and_setter_and_view():
     assert view.to_dict()["winner"] == "p1"
 
 
+def test_uno_declared_default_setter_and_view():
+    """uno_declared は既定空。with_uno_declared で不変更新し、PlayerView に公開される。"""
+    st = make_state()
+    assert st.uno_declared == frozenset()
+    d = st.with_uno_declared({"p1"})
+    assert d.uno_declared == frozenset({"p1"})
+    assert st.uno_declared == frozenset()  # 元は不変
+    view = player_view(d, "p2")  # 相手からも宣言状態は見える（指摘の判定に必要）
+    assert view.uno_declared == frozenset({"p1"})
+    assert view.to_dict()["uno_declared"] == ["p1"]
+
+
 # --- engine 純粋性: ネットワーク/描画非依存 ----------------------------------
 
 
