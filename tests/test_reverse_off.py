@@ -12,7 +12,7 @@ from lUNO.engine.cards import REVERSE, SKIP, CardInstance, CardType, Color
 from lUNO.engine.engine import STANDARD_TURN_ACTIONS, apply_action
 from lUNO.engine.hooks import build_registry
 from lUNO.engine.state import GameState
-from lUNO.rules import reverse_off, standard
+from lUNO.rules import registry, reverse_off, standard
 
 
 def _reg():
@@ -68,3 +68,32 @@ def test_win_on_reverse_still_valid():
     out = apply_action(_reg(), st, PlayAction("p1", (1,)))
     assert out.winner == "p1"
     assert out.awaiting == {}  # 終局で受理集合は閉じる
+
+
+def test_active_ruleset_applies_reverse_off():
+    """有効化リスト(ENABLED_RULES)の実配列・順序で reverse_off が効くことをロックする。"""
+    st = _state(card(REVERSE, Color.RED, 1))
+    out = apply_action(registry(), st, PlayAction("p1", (1,)))
+    assert out.current_player == "p2"  # 実 registry でも相手へ手番が移る
+
+
+def test_reverse_playable_by_symbol_match_across_colors():
+    """色違いのリバースの上にリバースを重ねられる（記号一致、house-rules §1）。"""
+    st = GameState(
+        hands={"p1": (card(REVERSE, Color.BLUE, 1),), "p2": (card("9", Color.GREEN, 4),)},
+        draw_pile=(),
+        discard_pile=(card(REVERSE, Color.RED, 3),),  # トップは赤リバース、出すのは青リバース
+        current_player="p1",
+        rng_state=random.Random(0).getstate(),
+        awaiting={"p1": STANDARD_TURN_ACTIONS},
+    )
+    out = apply_action(_reg(), st, PlayAction("p1", (1,)))
+    assert out.winner == "p1"  # 記号一致で出せて上がり成立（＝can_play が許可）
+
+
+def test_reverse_under_forced_color():
+    """強制色下ではリバースも強制色一致が必要。一致すれば無効効果で相手へ手番。"""
+    st = _state(card(REVERSE, Color.RED, 1)).with_forced_color(Color.RED)
+    out = apply_action(_reg(), st, PlayAction("p1", (1,)))
+    assert out.current_player == "p2"
+    assert out.forced_color is None  # 色付き札で強制色は解除される
