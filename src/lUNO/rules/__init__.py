@@ -11,6 +11,7 @@ from __future__ import annotations
 from ..engine.hooks import HookRegistry, build_registry
 from . import (
     draw2_stack,
+    jump_in,
     multi_play,
     reverse_off,
     standard,
@@ -28,6 +29,7 @@ ENABLED_RULES = [
     draw2_stack.RULES,  # #38 Draw2 スタック（§3）
     multi_play.RULES,  # #37 複数枚出し（§2）
     uno_call.RULES,  # #41 UNO 宣言＋指摘（§6）
+    jump_in.RULES,  # #27 ジャンプイン（手番外で完全一致なら割り込み可）
 ]
 
 
@@ -46,4 +48,5 @@ __all__ = [
     "draw2_stack",
     "multi_play",
     "uno_call",
+    "jump_in",
 ]
