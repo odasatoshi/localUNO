@@ -23,7 +23,7 @@ from lUNO.engine.cards import (
     Color,
 )
 from lUNO.engine.engine import IllegalAction, apply_action
-from lUNO.engine.hooks import Ctx
+from lUNO.engine.hooks import Ctx, build_registry
 from lUNO.engine.state import GameState
 from lUNO.rules import ENABLED_RULES, registry, setup_game, standard
 
@@ -132,7 +132,9 @@ def test_skip_keeps_turn_with_actor():
 
 
 def test_reverse_acts_as_skip_in_two_player():
-    reg = registry()
+    # standard 単体の挙動を担保する（active な ENABLED_RULES ではローカルルール #36
+    # reverse_off がこれを上書きしリバースを無効化する。active 側は test_reverse_off が担保）。
+    reg = build_registry([standard.RULES])
     st = state_with(
         p1=(card(REVERSE, Color.RED, 1), card("2", Color.RED, 2)),
         p2=(card("9", Color.GREEN, 3),),
