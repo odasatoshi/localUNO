@@ -16,8 +16,13 @@ from ..engine.hooks import CAN_PLAY, Ctx, Rule
 def allow_win_on_wild(current: bool, ctx: Ctx) -> bool:
     """ワイルド系は最後の1枚でも出せる（standard の no_win_on_wild を後勝ちで撤廃）。
 
-    ワイルドは元来 ``standard_can_play`` が常に許可しており、``current`` が False に
-    なる唯一の要因が ``no_win_on_wild``（最後の1枚制限）。ここで True を返して復活させる。
+    ワイルドは元来 ``standard_can_play`` が常に許可しており、standard 単体では
+    ``current`` が False になる唯一の要因が ``no_win_on_wild``（最後の1枚制限）。ここで
+    True を返して復活させる。
+
+    注意: 無条件 True のため、将来 win_unrestricted より**前**にワイルドへの別の
+    can_play 制限を積むと、それも本ルールが上書きする。§5「任意札で上がれる」とは整合
+    するが、ワイルドに固有制限を効かせたい場合は記述順（この後ろに置く）で制御する。
     """
     if ctx.card is not None and ctx.card.is_wild:
         return True
