@@ -108,9 +108,8 @@ main {
   transform: translateY(-6px);
 }
 
-/* 選択中（複数枚出しのトグル選択）: 浮かせて枠でハイライト */
+/* 選択中（複数枚出しのトグル選択）: 枠でハイライト */
 .hand .card.selected {
-  transform: translateY(-10px);
   outline: 3px solid var(--accent);
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
 }
@@ -119,6 +118,12 @@ main {
 .card-wrap {
   position: relative;
   display: inline-flex;
+  transition: transform 0.08s ease;
+}
+
+/* 選択したカードは wrap ごと持ち上げ、バッジも一緒に追従させる */
+.card-wrap:has(.card.selected) {
+  transform: translateY(-10px);
 }
 
 /* 選択順バッジ（先頭＝リード / トップ＝新しい捨て札 / 連番） */
