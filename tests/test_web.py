@@ -191,9 +191,9 @@ def test_app_js_challenge_uno_wired_and_gated_by_state():
         r'getElementById\("challenge-btn"\)\.addEventListener\(\s*"click"', APP_JS
     )
     assert re.search(r'type:\s*"challenge_uno"', APP_JS)
-    # gating 固有: challenge-btn の hidden を toggleClass で出し分ける結線
-    assert re.search(r'toggleClass\(\s*[^;]*?challenge-btn[^;]*?"hidden"', APP_JS, re.S)
-    assert "hand_counts" in APP_JS
+    # gating 固有: challenge-btn の hidden を「相手の枚数（oppCount）」で出し分ける
+    # 結線（UNO! 側の hand_counts 参照では満たせない＝指摘が相手側を見ることを特定）
+    assert re.search(r'toggleClass\(\s*[^;]*?challenge-btn[^;]*?oppCount', APP_JS, re.S)
 
 
 # --- WS 往復（フロントが送る実ペイロードがサーバと整合するか） ---------------
