@@ -10,6 +10,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# checkout とテスト実行のみで書き込みは不要。最小権限にする
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
