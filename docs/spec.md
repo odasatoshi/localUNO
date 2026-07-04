@@ -56,7 +56,8 @@
 **永続フィールドの所有権（重要）**: `pending_draw`（累積ドロー枚数）・`forced_color`（強制色）・`direction`（進行方向）・`current_player`（手番）などの**GameState フィールドは GameState が唯一のオーナー**で、書き換えは **state トランスフォーマ型フックのみ**が行う。値リデューサはこれらを扱わない。
 
 - 累積は「現在の state フィールド値を読み、加算して書き戻す」で表現する。例: ドロー2スタックは `state.pending_draw + 2` を書き戻す（シードは常に現在の GameState 値なので、重ねるほど積み上がる）。
-- **2人対戦での `direction`**: reverse は実質 skip（手番が自分へ戻る）。`direction` フィールドは保持するが、2人では手番送りの実効は skip と同じとして扱う。
+- **2人対戦での `direction`**: reverse は一般には実質 skip（手番が自分へ戻る）。`direction` フィールドは保持するが、2人では手番送りの実効は skip と同じとして扱う。
+  - ただし**本プロジェクトの有効ルールセットではリバースを無効化する**（[`house-rules.md`](./house-rules.md) §1 が正典、実装は `rules/reverse_off.py`）。すなわち出荷構成ではリバースは skip 化せず「通常の一致で出せる無効果カード」として扱う。上の記述は標準エンジン単体（`rules/standard.py` のみ）の一般論であり、有効ルールセットの挙動は house-rules を参照する。
 
 エンジンの実行器（`engine/hooks.py`）は、フックごとにこの2型を区別して合成する。
 
