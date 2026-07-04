@@ -15,6 +15,7 @@ from . import (
     jump_in,
     multi_play,
     reverse_off,
+    stalemate,
     standard,
     uno_call,
     win_unrestricted,
@@ -32,6 +33,7 @@ ENABLED_RULES = [
     uno_call.RULES,  # #41 UNO 宣言＋指摘（§6）
     jump_in.RULES,  # #27 ジャンプイン（手番外で完全一致なら割り込み可）
     draw_after_play.RULES,  # #40 ドロー後プレイ／自主ドロー（§7）
+    stalemate.RULES,  # #74 山切れ行き詰まりの引き分け決着（§8・末尾で jump_in を上書き）
 ]
 
 
@@ -52,4 +54,5 @@ __all__ = [
     "uno_call",
     "jump_in",
     "draw_after_play",
+    "stalemate",
 ]

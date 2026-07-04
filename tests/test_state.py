@@ -231,6 +231,18 @@ def test_winner_default_none_and_setter_and_view():
     assert view.to_dict()["winner"] == "p1"
 
 
+def test_is_draw_default_false_setter_and_view():
+    """is_draw は既定 False。with_is_draw で不変更新し、PlayerView に公開される（§8）。"""
+    st = make_state()
+    assert st.is_draw is False
+    drawn = st.with_is_draw(True)
+    assert drawn.is_draw is True
+    assert st.is_draw is False  # 元は不変
+    view = player_view(drawn, "p1")
+    assert view.is_draw is True
+    assert view.to_dict()["is_draw"] is True
+
+
 def test_uno_declared_default_setter_and_view():
     """uno_declared は既定空。with_uno_declared で不変更新し、PlayerView に公開される。"""
     st = make_state()

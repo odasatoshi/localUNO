@@ -19,6 +19,11 @@ from ..engine.state import GameState
 _PENALTY = 2
 
 
+def _is_over(state: GameState) -> bool:
+    """終局か（上がり or 山切れ引き分け）。終局後の UNO 宣言/指摘は無効。"""
+    return state.winner is not None or state.is_draw
+
+
 def _refresh_declared(state: GameState) -> GameState:
     """手札が1枚でないプレイヤーの宣言済みフラグを解除する（枚数変化で宣言は無効）。"""
     valid = frozenset(p for p in state.uno_declared if len(state.hands.get(p, ())) == 1)
@@ -28,7 +33,12 @@ def _refresh_declared(state: GameState) -> GameState:
 
 
 def declare_uno(state: GameState, ctx: Ctx) -> GameState:
-    """「UNO!」: 宣言者の手札が**1枚のときだけ**有効（それ以外は空押し・ペナルティなし）。"""
+    """「UNO!」: 宣言者の手札が**1枚のときだけ**有効（それ以外は空押し・ペナルティなし）。
+
+    終局後（上がり／山切れ引き分け）は無効（challenge_uno と対称）。
+    """
+    if _is_over(state):
+        return state  # 終局後の宣言は無効
     player = ctx.action.player
     if len(state.hands.get(player, ())) == 1:
         return state.with_uno_declared(state.uno_declared | {player})
@@ -37,8 +47,8 @@ def declare_uno(state: GameState, ctx: Ctx) -> GameState:
 
 def challenge_uno(state: GameState, ctx: Ctx) -> GameState:
     """「UNO言ってない!」: 相手が1枚かつ未宣言なら相手が2枚（成功）、そうでなければ
-    押した本人が2枚（誤爆）。終局後の指摘は無効。"""
-    if state.winner is not None:
+    押した本人が2枚（誤爆）。終局後（上がり／山切れ引き分け）の指摘は無効。"""
+    if _is_over(state):
         return state  # 終局後の指摘は無効
     challenger = ctx.action.player
     target = state.other_player(challenger)
