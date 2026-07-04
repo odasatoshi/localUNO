@@ -219,6 +219,18 @@ def test_other_player():
     assert st.other_player("p2") == "p1"
 
 
+def test_winner_default_none_and_setter_and_view():
+    """winner は既定 None（進行中）。with_winner で不変更新し、PlayerView に公開される。"""
+    st = make_state()
+    assert st.winner is None
+    won = st.with_winner("p1")
+    assert won.winner == "p1"
+    assert st.winner is None  # 元は不変
+    view = player_view(won, "p2")
+    assert view.winner == "p1"
+    assert view.to_dict()["winner"] == "p1"
+
+
 # --- engine 純粋性: ネットワーク/描画非依存 ----------------------------------
 
 

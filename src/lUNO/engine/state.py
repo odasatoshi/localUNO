@@ -74,6 +74,7 @@ class GameState:
     direction: int = 1
     pending_draw: int = 0
     awaiting: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    winner: str | None = None  # 終局（上がり）表現。None=進行中（§3.6 の idle と区別する）
 
     def __post_init__(self) -> None:
         # frozen をすり抜ける可変 dict を読み取り専用ビューへ（§3.2 の所有権を担保）
@@ -114,6 +115,9 @@ class GameState:
 
     def with_pending_draw(self, pending_draw: int) -> GameState:
         return self.replace(pending_draw=pending_draw)
+
+    def with_winner(self, winner: str | None) -> GameState:
+        return self.replace(winner=winner)
 
     def with_awaiting(self, awaiting: Mapping[str, Iterable[str]]) -> GameState:
         """受理可能アクションのマップを差し替える（値はタプル化して不変化）。"""
@@ -187,6 +191,7 @@ class PlayerView:
     pending_draw: int
     current_player: str
     awaiting: Mapping[str, tuple[str, ...]]
+    winner: str | None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "hand_counts", _readonly(self.hand_counts))
@@ -206,6 +211,7 @@ class PlayerView:
             "pending_draw": self.pending_draw,
             "current_player": self.current_player,
             "awaiting": {pid: list(actions) for pid, actions in self.awaiting.items()},
+            "winner": self.winner,
         }
 
 
@@ -230,6 +236,7 @@ def player_view(state: GameState, player_id: str) -> PlayerView:
         pending_draw=state.pending_draw,
         current_player=state.current_player,
         awaiting=dict(state.awaiting),
+        winner=state.winner,
     )
 
 
