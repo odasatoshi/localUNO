@@ -1,0 +1,171 @@
+"""server/app.py の試験（issue #14 の完了条件を担保）。
+
+- WS で Action を送ると PlayerView が返る
+- 静的ファイル（index.html・カード画像）が配信される
+"""
+
+from __future__ import annotations
+
+import itertools
+
+import pytest
+from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
+
+from lUNO.server.app import create_app
+from lUNO.server.session import Session
+
+
+def make_client(tmp_path, seed: int = 1) -> TestClient:
+    counter = itertools.count(1)
+    session = Session(seed=seed, token_factory=lambda: f"tok{next(counter)}")
+    web = tmp_path / "web"
+    web.mkdir()
+    (web / "index.html").write_text("<h1>local-UNO</h1>", encoding="utf-8")
+    # カード画像は web とは別の static/cards 相当ディレクトリから /cards で配信される（§7）
+    cards = tmp_path / "static" / "cards"
+    cards.mkdir(parents=True)
+    (cards / "red_5.png").write_bytes(b"\x89PNG\r\n")
+    return TestClient(create_app(session=session, web_dir=web, cards_dir=cards))
+
+
+# --- 静的配信 ---------------------------------------------------------------
+
+
+def test_serves_index_html(tmp_path):
+    client = make_client(tmp_path)
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "local-UNO" in r.text
+
+
+def test_serves_card_image(tmp_path):
+    client = make_client(tmp_path)
+    r = client.get("/cards/red_5.png")
+    assert r.status_code == 200
+    assert r.content.startswith(b"\x89PNG")
+
+
+def test_real_cards_dir_is_static_cards():
+    """既定のカード配信元が generator の出力先 static/cards と一致すること（§7）。"""
+    from lUNO.cards_render.generator import default_output_dir
+    from lUNO.server.app import CARDS_DIR
+
+    assert CARDS_DIR == default_output_dir()
+
+
+# --- WebSocket: Action → PlayerView ブロードキャスト ------------------------
+
+
+def test_ws_welcome_and_action_broadcasts_playerview(tmp_path):
+    client = make_client(tmp_path)
+    with client.websocket_connect("/ws") as ws1:
+        w1 = ws1.receive_json()
+        assert w1["type"] == "welcome"
+        assert w1["player_id"] == "p1"
+        assert len(w1["view"]["your_hand"]) == 7
+
+        with client.websocket_connect("/ws") as ws2:
+            w2 = ws2.receive_json()
+            assert w2["player_id"] == "p2"
+
+            # p1 がドロー → 両者へ state がブロードキャストされる
+            ws1.send_text('{"type":"draw","player":"p1"}')
+            s1 = ws1.receive_json()
+            s2 = ws2.receive_json()
+            assert s1["type"] == "state"
+            assert len(s1["view"]["your_hand"]) == 8  # p1 は8枚に
+            assert s2["view"]["hand_counts"]["p1"] == 8  # p2 には枚数のみ見える
+            # 相手手札の中身は p2 の view に入らない（本人のみ）
+            assert s2["view"]["you"] == "p2"
+
+
+def test_ws_third_connection_rejected(tmp_path):
+    client = make_client(tmp_path)
+    with client.websocket_connect("/ws") as ws1:
+        ws1.receive_json()
+        with client.websocket_connect("/ws") as ws2:
+            ws2.receive_json()
+            with client.websocket_connect("/ws") as ws3:
+                m = ws3.receive_json()
+                assert m["type"] == "error"
+
+
+def test_ws_illegal_action_returns_error(tmp_path):
+    client = make_client(tmp_path)
+    with client.websocket_connect("/ws") as ws1:
+        ws1.receive_json()
+        with client.websocket_connect("/ws") as ws2:
+            ws2.receive_json()
+            # p2 は手番でないので draw は拒否される
+            ws2.send_text('{"type":"draw","player":"p2"}')
+            m = ws2.receive_json()
+            assert m["type"] == "error"
+
+
+def test_ws_reconnect_with_token_restores_view(tmp_path):
+    client = make_client(tmp_path)
+    with client.websocket_connect("/ws") as ws1:
+        w1 = ws1.receive_json()
+        token = w1["token"]
+        ws1.send_text('{"type":"draw","player":"p1"}')
+        ws1.receive_json()  # state（p1 は8枚）
+    # ws1 切断後、同トークンで再接続 → 手札が復元される
+    with client.websocket_connect(f"/ws?token={token}") as ws1b:
+        wb = ws1b.receive_json()
+        assert wb["type"] == "welcome"
+        assert wb["player_id"] == "p1"
+        assert len(wb["view"]["your_hand"]) == 8
+
+
+def test_ws_last_wins_closes_old_connection(tmp_path):
+    """同トークンで再接続すると、サーバが旧接続を閉じる（後勝ち, §8）。"""
+    client = make_client(tmp_path)
+    with client.websocket_connect("/ws") as ws1:
+        w1 = ws1.receive_json()
+        token = w1["token"]
+        with client.websocket_connect(f"/ws?token={token}") as ws1b:
+            wb = ws1b.receive_json()
+            assert wb["player_id"] == "p1"
+            # 旧接続 ws1 はサーバ側から閉じられる
+            with pytest.raises(WebSocketDisconnect):
+                ws1.receive_json()
+
+
+def test_ws_reset_broadcasts_fresh_game(tmp_path):
+    client = make_client(tmp_path)
+    with client.websocket_connect("/ws") as ws1:
+        ws1.receive_json()
+        with client.websocket_connect("/ws") as ws2:
+            ws2.receive_json()
+            ws1.send_text('{"type":"draw","player":"p1"}')
+            ws1.receive_json()
+            ws2.receive_json()
+            # p1 がリセット → 両者に初期化された state がブロードキャストされる
+            ws1.send_text('{"type":"reset","player":"p1"}')
+            s1 = ws1.receive_json()
+            s2 = ws2.receive_json()
+            assert len(s1["view"]["your_hand"]) == 7
+            assert s2["view"]["hand_counts"]["p1"] == 7
+
+
+def test_ws_rejects_impersonation(tmp_path):
+    """p1 のトークンで p2 として行動しようとすると error。"""
+    client = make_client(tmp_path)
+    with client.websocket_connect("/ws") as ws1:
+        ws1.receive_json()
+        ws1.send_text('{"type":"draw","player":"p2"}')  # なりすまし
+        m = ws1.receive_json()
+        assert m["type"] == "error"
+
+
+def test_create_app_stores_session(tmp_path):
+    session = Session(seed=2)
+    app = create_app(session=session, web_dir=tmp_path / "w")
+    assert app.state.session is session
+
+
+@pytest.mark.parametrize("path", ["/does-not-exist.js"])
+def test_missing_static_returns_404(tmp_path, path):
+    client = make_client(tmp_path)
+    assert client.get(path).status_code == 404
