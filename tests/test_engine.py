@@ -14,13 +14,17 @@ import random
 import pytest
 
 from lUNO.engine.actions import (
+    ChallengeUnoAction,
     ChooseColorAction,
+    DeclareUnoAction,
     DrawAction,
     PlayAction,
     ResetAction,
 )
 from lUNO.engine.cards import WILD, CardInstance, CardType, Color
 from lUNO.engine.engine import (
+    ON_CHALLENGE_UNO,
+    ON_DECLARE_UNO,
     STANDARD_TURN_ACTIONS,
     IllegalAction,
     apply_action,
@@ -28,6 +32,7 @@ from lUNO.engine.engine import (
 )
 from lUNO.engine.hooks import (
     CAN_PLAY,
+    CAN_STACK,
     ON_AFTER_PLAY,
     ON_CHOOSE_COLOR,
     ON_TURN_END,
@@ -87,7 +92,7 @@ def test_play_moves_card_and_passes_turn():
     reg = build_registry([PERMISSIVE])
     st = GameState.new_game(P, 1)
     played = st.hands["p1"][0]
-    out = apply_action(reg, st, PlayAction("p1", played.id))
+    out = apply_action(reg, st, PlayAction("p1", (played.id,)))
     assert played not in out.hands["p1"]
     assert len(out.hands["p1"]) == 6
     assert out.discard_pile[-1] == played  # 捨て山トップに乗る
@@ -100,14 +105,14 @@ def test_play_rejected_when_can_play_false():
     st = GameState.new_game(P, 1)
     played = st.hands["p1"][0]
     with pytest.raises(IllegalAction):
-        apply_action(reg, st, PlayAction("p1", played.id))
+        apply_action(reg, st, PlayAction("p1", (played.id,)))
 
 
 def test_play_card_not_in_hand_rejected():
     reg = build_registry([PERMISSIVE])
     st = GameState.new_game(P, 1)
     with pytest.raises(IllegalAction):
-        apply_action(reg, st, PlayAction("p1", 99999))
+        apply_action(reg, st, PlayAction("p1", (99999,)))
 
 
 # --- 応答待ちライフサイクル: ワイルド→色選択待ち→確定（§3.6） ---------------
@@ -144,7 +149,7 @@ def test_wild_pauses_for_color_then_continues():
     st = _wild_state()
 
     # play(wild): 効果が色選択待ちを立てて停止（手番送りしない）
-    paused = apply_action(reg, st, PlayAction("p1", 1))
+    paused = apply_action(reg, st, PlayAction("p1", (1,)))
     assert paused.discard_pile[-1].id == 1
     assert paused.awaiting == {"p1": ("choose_color",)}
     assert paused.current_player == "p1"
@@ -238,7 +243,7 @@ def test_apply_does_not_mutate_input_state():
     reg = build_registry([PERMISSIVE])
     st = GameState.new_game(P, 1)
     snapshot = (st.hands["p1"], dict(st.awaiting), st.rng_state, st.discard_pile)
-    apply_action(reg, st, PlayAction("p1", st.hands["p1"][0].id))
+    apply_action(reg, st, PlayAction("p1", (st.hands["p1"][0].id,)))
     assert (st.hands["p1"], dict(st.awaiting), st.rng_state, st.discard_pile) == snapshot
 
 
@@ -281,7 +286,7 @@ def test_winner_stops_turn_advance():
 
     reg = build_registry([PERMISSIVE, {ON_AFTER_PLAY: win_on_play}])
     st = GameState.new_game(P, 1)
-    out = apply_action(reg, st, PlayAction("p1", st.hands["p1"][0].id))
+    out = apply_action(reg, st, PlayAction("p1", (st.hands["p1"][0].id,)))
     assert out.winner == "p1"
     assert out.current_player == "p1"  # 手番送りしない
     assert out.awaiting == {}  # 終局で誰も操作不可
@@ -290,3 +295,102 @@ def test_winner_stops_turn_advance():
     from lUNO.engine.state import player_view
 
     assert player_view(out, "p2").winner == "p1"
+
+
+# --- #35 基盤拡張: 複数枚出し（can_stack ゲート） ----------------------------
+
+
+def _multi_state() -> GameState:
+    """p1 が id 1,2 の2枚を持つ最小 state（top は id 3）。"""
+    return GameState(
+        hands={
+            "p1": (card("7", Color.RED, 1), card("7", Color.BLUE, 2)),
+            "p2": (card("9", Color.GREEN, 4),),
+        },
+        draw_pile=(),
+        discard_pile=(card("3", Color.BLUE, 3),),
+        current_player="p1",
+        rng_state=random.Random(0).getstate(),
+        awaiting={"p1": STANDARD_TURN_ACTIONS},
+    )
+
+
+def test_multi_card_play_rejected_without_stack_rule():
+    """既定では can_stack シード False → 複数枚出しは拒否（標準は単数のみ）。"""
+    reg = build_registry([PERMISSIVE])  # can_play True だが can_stack ルール無し
+    st = _multi_state()
+    with pytest.raises(IllegalAction):
+        apply_action(reg, st, PlayAction("p1", (1, 2)))
+
+
+def test_multi_card_play_allowed_with_stack_rule():
+    """can_stack を許可するルールがあれば複数枚を出せ、最後のカードがトップになる。"""
+    reg = build_registry([PERMISSIVE, {CAN_STACK: lambda current, ctx: True}])
+    st = _multi_state()
+    out = apply_action(reg, st, PlayAction("p1", (1, 2)))
+    assert len(out.hands["p1"]) == 0  # 2枚とも手札から抜ける
+    assert [c.id for c in out.discard_pile[-2:]] == [1, 2]  # 出した順に積む
+    assert out.discard_pile[-1].id == 2  # 最後がトップ
+    assert out.current_player == "p2"
+
+
+def test_multi_card_effect_hook_sees_played_cards():
+    """効果フックは played_cards で出した群全体を参照できる（Draw2 累積等の土台）。"""
+    seen = []
+
+    def record(state, ctx):
+        seen.append(tuple(c.id for c in (ctx.played_cards or ())))
+        return state
+
+    reg = build_registry(
+        [PERMISSIVE, {CAN_STACK: lambda c, ctx: True}, {ON_AFTER_PLAY: record}]
+    )
+    apply_action(reg, _multi_state(), PlayAction("p1", (1, 2)))
+    assert seen == [(1, 2)]
+
+
+def test_single_play_sets_played_cards_singleton():
+    """単数プレイでも played_cards は要素1個（後方互換の要）。"""
+    seen = []
+    reg = build_registry(
+        [PERMISSIVE, {ON_AFTER_PLAY: lambda s, ctx: seen.append(ctx.played_cards) or s}]
+    )
+    st = _multi_state()
+    apply_action(reg, st, PlayAction("p1", (1,)))
+    assert seen == [(st.hands["p1"][0],)]  # (card,) の単一要素タプル
+
+
+def test_multi_card_with_missing_id_rejected_no_partial_apply():
+    """複数出しで一部 id が手札に無ければ IllegalAction（部分適用されない）。"""
+    reg = build_registry([PERMISSIVE, {CAN_STACK: lambda c, ctx: True}])
+    st = _multi_state()  # p1 手札は id 1,2 のみ
+    with pytest.raises(IllegalAction):
+        apply_action(reg, st, PlayAction("p1", (1, 99999)))
+
+
+# --- #35 基盤拡張: UNO! / 指摘 は常時受理の割り込み --------------------------
+
+
+def test_declare_uno_accepted_out_of_turn_without_advancing():
+    """declare_uno は awaiting に無くても受理され、手番を消費しない（割り込み）。"""
+    fired = []
+    reg = build_registry([{ON_DECLARE_UNO: lambda s, ctx: fired.append(ctx.action.player) or s}])
+    st = GameState.new_game(P, 1)  # awaiting = {p1: [play, draw]}、p2 は手番外
+    out = apply_action(reg, st, DeclareUnoAction("p2"))  # 手番外の p2 でも受理
+    assert fired == ["p2"]
+    assert out.current_player == st.current_player  # 手番送りしない
+    assert out.awaiting == st.awaiting  # awaiting も不変
+
+
+def test_challenge_uno_accepted_out_of_turn():
+    """challenge_uno（UNO言ってない!）も常時受理の割り込みで on_challenge_uno を回す。
+
+    宣言側と対称に、手番・awaiting を消費しない（割り込み）ことも担保する。
+    """
+    fired = []
+    reg = build_registry([{ON_CHALLENGE_UNO: lambda s, ctx: fired.append(ctx.action.player) or s}])
+    st = GameState.new_game(P, 1)
+    out = apply_action(reg, st, ChallengeUnoAction("p2"))
+    assert fired == ["p2"]
+    assert out.current_player == st.current_player  # 手番送りしない
+    assert out.awaiting == st.awaiting  # awaiting も不変

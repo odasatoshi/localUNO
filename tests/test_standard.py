@@ -101,7 +101,7 @@ def test_cannot_win_on_wild_restriction():
     )
     assert _can_play(reg, st, card(WILD, None, 1)) is False
     with pytest.raises(IllegalAction):
-        apply_action(reg, st, PlayAction("p1", 1))
+        apply_action(reg, st, PlayAction("p1", (1,)))
 
 
 # --- 効果 -------------------------------------------------------------------
@@ -114,7 +114,7 @@ def test_number_card_passes_turn():
         p2=(card("9", Color.GREEN, 3),),
         top=card("7", Color.RED, 4),
     )
-    out = apply_action(reg, st, PlayAction("p1", 1))
+    out = apply_action(reg, st, PlayAction("p1", (1,)))
     assert out.current_player == "p2"
     assert out.awaiting == {"p2": ("play", "draw")}
 
@@ -126,7 +126,7 @@ def test_skip_keeps_turn_with_actor():
         p2=(card("9", Color.GREEN, 3),),
         top=card("7", Color.RED, 4),
     )
-    out = apply_action(reg, st, PlayAction("p1", 1))
+    out = apply_action(reg, st, PlayAction("p1", (1,)))
     assert out.current_player == "p1"  # 2人では相手を飛ばす＝自分の手番
     assert out.awaiting == {"p1": ("play", "draw")}
 
@@ -138,7 +138,7 @@ def test_reverse_acts_as_skip_in_two_player():
         p2=(card("9", Color.GREEN, 3),),
         top=card("7", Color.RED, 4),
     )
-    out = apply_action(reg, st, PlayAction("p1", 1))
+    out = apply_action(reg, st, PlayAction("p1", (1,)))
     assert out.current_player == "p1"
 
 
@@ -150,7 +150,7 @@ def test_draw2_forces_opponent_draw_then_returns_turn():
         top=card("7", Color.RED, 4),
         draw=(card("1", Color.BLUE, 5), card("2", Color.YELLOW, 6)),
     )
-    after = apply_action(reg, st, PlayAction("p1", 1))
+    after = apply_action(reg, st, PlayAction("p1", (1,)))
     assert after.pending_draw == 2
     assert after.current_player == "p2"
     assert after.awaiting == {"p2": ("draw",)}  # 相手は引くのみ
@@ -168,7 +168,7 @@ def test_wild_choose_color_then_pass_turn():
         p2=(card("9", Color.GREEN, 3),),
         top=card("7", Color.RED, 4),
     )
-    paused = apply_action(reg, st, PlayAction("p1", 1))
+    paused = apply_action(reg, st, PlayAction("p1", (1,)))
     assert paused.awaiting == {"p1": ("choose_color",)}
     assert paused.current_player == "p1"
     assert paused.pending_draw == 0  # 通常ワイルドは強制ドロー無し
@@ -188,7 +188,7 @@ def test_wild_draw4_choose_then_opponent_draws4():
         top=card("7", Color.RED, 4),
         draw=draw,
     )
-    paused = apply_action(reg, st, PlayAction("p1", 1))
+    paused = apply_action(reg, st, PlayAction("p1", (1,)))
     assert paused.awaiting == {"p1": ("choose_color",)}
     assert paused.pending_draw == 4
 
@@ -214,7 +214,7 @@ def test_play_last_card_wins():
         p2=(card("9", Color.GREEN, 2),),
         top=card("7", Color.RED, 3),
     )
-    out = apply_action(reg, st, PlayAction("p1", 1))
+    out = apply_action(reg, st, PlayAction("p1", (1,)))
     assert out.winner == "p1"
     assert out.current_player == "p1"  # 終局で手番送りしない
 
@@ -227,7 +227,7 @@ def test_win_on_skip_closes_awaiting():
         p2=(card("9", Color.GREEN, 2),),
         top=card("7", Color.RED, 3),
     )
-    out = apply_action(reg, st, PlayAction("p1", 1))
+    out = apply_action(reg, st, PlayAction("p1", (1,)))
     assert out.winner == "p1"
     assert out.awaiting == {}  # 終局: 受理集合を空に
     assert out.current_player == "p1"
@@ -244,7 +244,7 @@ def test_win_on_draw2_closes_awaiting_and_pending():
         top=card("7", Color.RED, 3),
         draw=(card("1", Color.BLUE, 4), card("2", Color.BLUE, 5)),
     )
-    out = apply_action(reg, st, PlayAction("p1", 1))
+    out = apply_action(reg, st, PlayAction("p1", (1,)))
     assert out.winner == "p1"
     assert out.awaiting == {}
     assert out.pending_draw == 0
@@ -274,12 +274,12 @@ def test_full_round_play_draw_effect_win():
         draw=(card("0", Color.RED, 6),),
     )
     # p1: 赤5 を出す → 相手へ
-    st = apply_action(reg, st, PlayAction("p1", 1))
+    st = apply_action(reg, st, PlayAction("p1", (1,)))
     assert st.current_player == "p2"
     # p2: 緑9 は赤5 に出せない → 引く（配布から赤0）→ 相手へ
     st = apply_action(reg, st, DrawAction("p2"))
     assert st.current_player == "p1"
     assert len(st.hands["p2"]) == 3
     # p1: 赤2 を出す → 手札が尽きて上がり
-    st = apply_action(reg, st, PlayAction("p1", 2))
+    st = apply_action(reg, st, PlayAction("p1", (2,)))
     assert st.winner == "p1"
