@@ -15,7 +15,7 @@ from lUNO.engine.cards import CardInstance, CardType, Color
 from lUNO.engine.engine import IllegalAction, apply_action
 from lUNO.engine.hooks import build_registry
 from lUNO.engine.state import GameState
-from lUNO.rules import jump_in, standard
+from lUNO.rules import jump_in, registry, standard
 
 P = ("p1", "p2")
 
@@ -73,6 +73,19 @@ def test_color_only_match_cannot_jump_in():
     top = card("5", Color.RED, 10)
     st = state_with_jump_slot(
         p1=(card("9", Color.RED, 1),),  # 赤9: 色は一致だが記号が違う
+        p2=(card("3", Color.GREEN, 3),),
+        top=top,
+    )
+    with pytest.raises(IllegalAction):
+        apply_action(r, st, PlayAction("p1", card_ids=(1,)))
+
+
+def test_special_card_cannot_jump_in_off_turn():
+    """特殊札（同一 CardType でも）は手番外割り込み対象外＝弾く（土台スコープ）。"""
+    r = reg()
+    top = card("skip", Color.RED, 10)
+    st = state_with_jump_slot(
+        p1=(card("skip", Color.RED, 1), card("9", Color.BLUE, 2)),  # 赤skip 完全一致だが特殊札
         p2=(card("3", Color.GREEN, 3),),
         top=top,
     )
@@ -139,6 +152,45 @@ def test_jump_slot_is_established_after_a_normal_turn():
 
 
 # --- engine 差分ゼロ（rules 内で完結） --------------------------------------
+
+
+def test_jump_in_win_by_exact_match():
+    """割り込みで最後の1枚（完全一致・数字）を出すと上がりになる（終局を閉じる）。"""
+    r = reg()
+    top = card("5", Color.RED, 10)
+    st = state_with_jump_slot(
+        p1=(card("5", Color.RED, 1),),  # これが最後の1枚
+        p2=(card("3", Color.GREEN, 3),),
+        top=top,
+        current="p2",
+    )
+    out = apply_action(r, st, PlayAction("p1", card_ids=(1,)))
+    assert out.winner == "p1"
+    assert out.awaiting == {}  # 終局: 受理集合は空
+    assert out.pending_draw == 0
+
+
+def test_jump_in_works_in_full_enabled_stack():
+    """full ENABLED_RULES（他ローカルルール共存）でもジャンプインが機能する。"""
+    r = registry()
+    top = card("5", Color.RED, 10)
+    st = state_with_jump_slot(
+        p1=(card("5", Color.RED, 1), card("9", Color.BLUE, 2)),
+        p2=(card("3", Color.GREEN, 3),),
+        top=top,
+        current="p2",
+    )
+    out = apply_action(r, st, PlayAction("p1", card_ids=(1,)))
+    assert out.discard_pile[-1].id == 1
+    assert out.current_player == "p2"  # 割り込み後は p1 の次 = p2
+    # 不一致は full stack でも弾かれる
+    st2 = state_with_jump_slot(
+        p1=(card("9", Color.RED, 1),),  # 色のみ一致
+        p2=(card("3", Color.GREEN, 3),),
+        top=top,
+    )
+    with pytest.raises(IllegalAction):
+        apply_action(r, st2, PlayAction("p1", card_ids=(1,)))
 
 
 def test_jump_in_is_pure_rules_no_engine_hooks_beyond_public():

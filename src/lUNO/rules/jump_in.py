@@ -20,9 +20,9 @@ engine 非改修（rules/ 完結）で、engine の次の性質だけを使う:
 3. on_turn_end `enable_jump_in`: 既定の手番送り（相手へ）を行いつつ、手番外プレイヤーに
    `("play",)` の割り込み枠を張る（一致限定は 1. が担保）。
 
-限定: 特殊札（スキップ/ドロー2/ワイルド）を手番外で割り込んだ場合の手番制御は standard の
-効果が `current_player`（手番者）基準で動くため厳密でない。土台では数字カード等の通常
-ジャンプインを対象とする（完全一致の割り込み可否・手番遷移が完了条件）。
+限定: 特殊札（スキップ/ドロー2/ワイルド）の手番外割り込みは土台対象外とし、``can_play``
+制限で**明示的に却下**する（特殊札の効果は手番者基準で動くため手番外だと破綻する）。土台の
+ジャンプインは完全一致の**数字カード**を対象とする（割り込み可否・上がり・手番遷移が完了条件）。
 """
 
 from __future__ import annotations
@@ -35,17 +35,22 @@ _JUMP = ("play",)  # 手番外は割り込み play のみ（一致限定は can_
 
 
 def only_exact_off_turn(current: bool, ctx: Ctx) -> bool:
-    """手番外プレイ（出す人 ≠ 現手番）は場と完全一致（同一 CardType）に限る（制限）。
+    """手番外プレイ（出す人 ≠ 現手番）は場と完全一致の**数字カード**に限る（制限）。
 
-    standard は色/記号一致で許可するが、ジャンプインは完全一致のみ。手番中のプレイには
-    干渉しない（standard の判定をそのまま通す）。
+    standard は色/記号一致で許可するが、ジャンプインは完全一致のみ。さらに土台では特殊札
+    （スキップ/ドロー2/ワイルド）の手番外割り込みは対象外とし、明示的に却下する（特殊札の
+    効果は手番者基準で動くため手番外だと破綻する。silently-wrong を避け構造的に弾く）。
+    手番中のプレイには干渉しない（standard の判定をそのまま通す）。
     """
     if not current:
         return False
     action = ctx.action
     if action is not None and action.player != ctx.current_player:
         top = ctx.top_of_pile
-        if top is None or ctx.card is None or ctx.card.card_type != top.card_type:
+        card = ctx.card
+        if top is None or card is None or card.card_type != top.card_type:
+            return False
+        if not card.symbol.isdigit():  # 特殊札の手番外割り込みは土台対象外
             return False
     return current
 
@@ -53,12 +58,18 @@ def only_exact_off_turn(current: bool, ctx: Ctx) -> bool:
 def claim_turn_on_jump_in(state: GameState, ctx: Ctx) -> GameState:
     """手番外プレイなら出した人を現手番に据える（手番送りを正しくするため）。
 
-    応答待ちを立てる特殊札プレイ時（`awaiting` 非空）は触らない。通常の割り込み
-    （数字カード等）でのみ、出した人を手番者にしてから on_turn_end に渡す。
+    数字カードの割り込みのみが `only_exact_off_turn` を通るため、ここに来る手番外プレイは
+    応答待ちを立てない（`awaiting` 空）。出した人を手番者にしたうえで、その人の手札が尽きた
+    なら**上がりを確定**する（standard の check_winner は手番者基準で割り込んだ本人を見られ
+    ないため、ここで判定して終局を閉じる）。
     """
     action = ctx.action
     if action is not None and action.player != state.current_player and not state.awaiting:
-        return state.with_current_player(action.player)
+        jumper = action.player
+        state = state.with_current_player(jumper)
+        if len(state.hands.get(jumper, ())) == 0:
+            # standard.check_winner と同じ終局クローズをミラーする
+            state = state.with_winner(jumper).with_awaiting({}).with_pending_draw(0)
     return state
 
 
