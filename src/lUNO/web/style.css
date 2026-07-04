@@ -108,6 +108,13 @@ main {
   transform: translateY(-6px);
 }
 
+/* 選択中（複数枚出しのトグル選択）: 浮かせて枠でハイライト */
+.hand .card.selected {
+  transform: translateY(-10px);
+  outline: 3px solid var(--accent);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
 .forced-color {
   font-weight: bold;
   text-transform: uppercase;

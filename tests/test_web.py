@@ -88,6 +88,24 @@ def test_app_js_play_uses_card_ids_list():
     assert "card_id:" not in APP_JS  # 旧単数フィールドを送っていない
 
 
+def test_index_has_play_button():
+    """複数枚出しをまとめて確定する「出す」ボタンがある（#62）。"""
+    assert 'id="play-btn"' in INDEX
+
+
+def test_app_js_supports_multi_select_play():
+    """複数枚出し UI: タップで選択トグルし、選択順に card_ids でまとめて出す（#62）。"""
+    # 選択状態を保持し、トグルで付け外しする
+    assert "selected" in APP_JS
+    assert "toggleSelect" in APP_JS
+    # 「出す」ボタンで選択集合を送る（クリック即単数送信ではない）
+    assert "play-btn" in APP_JS
+    assert "playSelected" in APP_JS
+    assert "state.selected" in APP_JS
+    # クリックで即 1 枚送る旧挙動を残していない（選択→出す に一本化）
+    assert "card_ids: [card.id]" not in APP_JS
+
+
 # --- WS 往復（フロントが送る実ペイロードがサーバと整合するか） ---------------
 
 
