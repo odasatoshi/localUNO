@@ -23,8 +23,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="カード画像を全再生成する（未実装 / #12）",
     )
-    parser.add_argument("--host", default="0.0.0.0", help="待受ホスト（未実装 / #14）")
-    parser.add_argument("--port", type=int, default=8000, help="待受ポート（未実装 / #14）")
+    parser.add_argument("--host", default="0.0.0.0", help="待受ホスト（未実装 / #16）")
+    parser.add_argument("--port", type=int, default=8000, help="待受ポート（未実装 / #16）")
     return parser
 
 

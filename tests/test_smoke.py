@@ -26,6 +26,14 @@ def test_cli_help_exits_zero() -> None:
     assert exc.value.code == 0
 
 
+def test_cli_version_matches_package(capsys: pytest.CaptureFixture[str]) -> None:
+    parser = build_parser()
+    with pytest.raises(SystemExit) as exc:
+        parser.parse_args(["--version"])
+    assert exc.value.code == 0
+    assert lUNO.__version__ in capsys.readouterr().out
+
+
 def test_cli_main_returns_zero() -> None:
     assert main([]) == 0
 
