@@ -2,7 +2,8 @@
 
 手札が1枚になる手番では「UNO!」宣言が必須。宣言忘れは相手が「UNO言ってない!」で
 指摘でき、成功なら宣言し忘れた側が2枚引く。誤爆（相手が1枚でない/既に宣言済み＝相手の
-UNO! 後）は押した本人が2枚引く。LAN 前提で遅延・同時押しの競合は考慮しない。
+UNO! 後）は押した本人が2枚引く。手札1枚でない「UNO!」宣言（誤宣言）も本人が2枚引く。
+LAN 前提で遅延・同時押しの競合は考慮しない。
 
 engine（#35）が `DeclareUnoAction`/`ChallengeUnoAction`（常時受理の割り込み）と
 `ON_DECLARE_UNO`/`ON_CHALLENGE_UNO` フック、`uno_declared` フィールドを既に用意して
@@ -33,16 +34,22 @@ def _refresh_declared(state: GameState) -> GameState:
 
 
 def declare_uno(state: GameState, ctx: Ctx) -> GameState:
-    """「UNO!」: 宣言者の手札が**1枚のときだけ**有効（それ以外は空押し・ペナルティなし）。
+    """「UNO!」: 宣言者の手札が**1枚のときだけ**有効。1枚なら宣言成立（宣言済みへ）、
+    既に宣言済みなら no-op（集合の再追加）。
 
-    終局後（上がり／山切れ引き分け）は無効（challenge_uno と対称）。
+    手札が**1枚でない**のに宣言する**誤宣言**は、押した本人が **2枚**引く（指摘誤爆と
+    同じペナルティ）。終局後（上がり／山切れ引き分け）は無効（challenge_uno と対称。
+    手札0枚もここに含まれる）。
     """
     if _is_over(state):
         return state  # 終局後の宣言は無効
     player = ctx.action.player
     if len(state.hands.get(player, ())) == 1:
         return state.with_uno_declared(state.uno_declared | {player})
-    return state
+    # 手札が1枚でない誤宣言は本人が2枚ドロー（指摘誤爆と対称）。ドロー後の
+    # フラグ整理は challenge_uno と対称に置く（本経路では実質 no-op だが防御的）。
+    state = draw_cards(state, player, _PENALTY)
+    return _refresh_declared(state)
 
 
 def challenge_uno(state: GameState, ctx: Ctx) -> GameState:
