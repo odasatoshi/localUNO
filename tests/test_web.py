@@ -138,30 +138,28 @@ def test_ws_multi_card_play_is_accepted_and_last_becomes_top():
     欠けていた。ここで「複数 card_ids を送れる」ことに加え、card_ids の順序契約
     （先頭＝リード・末尾＝新トップ, house-rules §2 / multi_play）を固定する。
     """
-    for seed in range(1, 80):
-        client = deterministic_client(seed=seed)
-        with client.websocket_connect("/ws") as ws1:
-            welcome = ws1.receive_json()
-            group = _find_multi_group(
-                welcome["view"]["your_hand"], welcome["view"]["top_of_pile"]
-            )
-            if group is None:
-                continue
-            with client.websocket_connect("/ws") as ws2:
-                ws2.receive_json()
-                ws1.send_text(
-                    json.dumps({"type": "play", "player": "p1", "card_ids": group})
-                )
-                msg = ws1.receive_json()
-                assert msg["type"] == "state"  # error でなく state が返る
-                # 順序契約: 末尾に置いたカードが新しい捨て山トップになる
-                assert msg["view"]["top_of_pile"]["id"] == group[-1]
-                # 相手視界へ即反映: p1 の手札は 7 → 5（2枚出し）
-                s2 = ws2.receive_json()
-                assert s2["type"] == "state"
-                assert s2["view"]["hand_counts"]["p1"] == 7 - len(group)
-            return
-    pytest.skip("seed 1..79 に複数枚出し可能な初手が見つからなかった")
+    # seed を固定して決定的に検証する。群が見つからなければ skip で素通りさせず
+    # 失敗させる（deck/ルール退行でカバレッジが全損した場合に表面化させるため）。
+    client = deterministic_client(seed=1)
+    with client.websocket_connect("/ws") as ws1:
+        welcome = ws1.receive_json()
+        group = _find_multi_group(
+            welcome["view"]["your_hand"], welcome["view"]["top_of_pile"]
+        )
+        assert group is not None, (
+            "seed=1 の初手に複数枚出し可能な群が無い（deck 変更時は seed を見直す）"
+        )
+        with client.websocket_connect("/ws") as ws2:
+            ws2.receive_json()
+            ws1.send_text(json.dumps({"type": "play", "player": "p1", "card_ids": group}))
+            msg = ws1.receive_json()
+            assert msg["type"] == "state"  # error でなく state が返る
+            # 順序契約: 末尾に置いたカードが新しい捨て山トップになる
+            assert msg["view"]["top_of_pile"]["id"] == group[-1]
+            # 相手視界へ即反映: p1 の手札は 7 → 5（2枚出し）
+            s2 = ws2.receive_json()
+            assert s2["type"] == "state"
+            assert s2["view"]["hand_counts"]["p1"] == 7 - len(group)
 
 
 def test_ws_reconnect_restores_hand_via_token():
