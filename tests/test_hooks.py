@@ -320,6 +320,13 @@ def test_ctx_from_state_owner_for_off_turn():
     assert ctx.hand == st.hands["p2"]  # 評価対象は相手手札
 
 
+def test_ctx_from_state_rejects_unknown_owner():
+    """未知 owner は沈黙 None ではなく ValueError（player_view と一貫）。"""
+    st = GameState.new_game(PLAYERS, seed=1)
+    with pytest.raises(ValueError):
+        Ctx.from_state(st, owner="typo")
+
+
 # --- transform_state の戻り値ガード ------------------------------------------
 
 

@@ -79,6 +79,8 @@ class Ctx:
         は評価対象カードの持ち主（手番外評価では相手を指定）。既定は手番プレイヤー。
         """
         who = state.current_player if owner is None else owner
+        if who not in state.hands:
+            raise ValueError(f"未知の owner: {who!r}")
         return cls(
             state=state,
             current_player=state.current_player,
