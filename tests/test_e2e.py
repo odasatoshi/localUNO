@@ -30,9 +30,12 @@ def _play_full_game(seed: int, max_steps: int = 4000) -> dict:
         views = {"p1": ws1.receive_json()["view"], "p2": ws2.receive_json()["view"]}
 
         def broadcast_into(views: dict) -> None:
-            # 成功 Action は両接続へ state がブロードキャストされる
+            # 成功 Action は両接続へ state がブロードキャストされる。想定外
+            # （error 等）なら早期失敗させる（偽の無限ブロックを避ける）。
             for pid, ws in socks.items():
-                views[pid] = ws.receive_json()["view"]
+                m = ws.receive_json()
+                assert m["type"] == "state", f"想定外メッセージ: {m}"
+                views[pid] = m["view"]
 
         for _ in range(max_steps):
             cur = views["p1"]["current_player"]

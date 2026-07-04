@@ -61,7 +61,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.no_serve:
         return 0
 
-    print(f"luno: サーバを起動します → http://{args.host}:{args.port}")
+    print(
+        f"luno: サーバを起動します（このホストは http://localhost:{args.port}/ 、"
+        f"LAN 内の相手は http://<このホストのLAN IP>:{args.port}/ ）"
+    )
     run_server(host=args.host, port=args.port)
     return 0
 

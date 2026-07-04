@@ -60,7 +60,14 @@ def test_regenerate_flag_forwarded(monkeypatch):
     assert captured["regen"] is True
 
 
-def test_generate_diff_is_idempotent():
-    """一度生成すれば、2回目の差分生成は 0 枚（spec §7 差分生成）。"""
-    cli.generate()  # 未生成分があれば生成
+def test_generate_diff_is_idempotent(tmp_path, monkeypatch):
+    """一度生成すれば、2回目の差分生成は 0 枚（spec §7 差分生成）。隔離環境で確認。"""
+    orig = cli.generate_cards
+
+    def to_tmp(regenerate=False):
+        return orig(out_dir=tmp_path, regenerate=regenerate)
+
+    monkeypatch.setattr(cli, "default_output_dir", lambda: tmp_path)
+    monkeypatch.setattr(cli, "generate_cards", to_tmp)
+    assert cli.generate() > 0  # 初回は生成される
     assert cli.generate() == 0  # 2回目は差分なし
