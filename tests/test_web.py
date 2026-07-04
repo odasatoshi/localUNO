@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -130,16 +131,26 @@ def test_index_has_pass_button():
 
 
 def test_app_js_pass_button_wired_and_gated_by_awaiting():
-    """パスボタンが pass を送り、awaiting に応じて活性制御される（#64）。
+    """パスボタンが pass を送り（click 結線）、awaiting に応じて活性制御される（#64）。
 
     サーバは自主ドロー後に awaiting=[play, pass] にして手番を保持する。この pass を
     送る手段が UI に無いと、引いた札を出せない時に手番を進められず詰む（回帰防止）。
+
+    gating（無効化）と wiring（click→送信）を**分離して**検証する。無効化行
+    ``pass-btn").disabled = !allowed.includes("pass")`` は文字列 ``"pass"`` /
+    ``getElementById("pass-btn")`` / ``includes("pass")`` を単独で満たすため、緩い
+    部分一致では click ハンドラが消えても素通りする（本 PR の主眼である結線退行を
+    捕捉できない）。そこで各行に特異なパターンで照合する。
     """
-    # クリックで pass アクションを送る結線
-    assert 'getElementById("pass-btn")' in APP_JS
-    assert '"pass"' in APP_JS
-    # awaiting に pass が無ければ無効化（draw/play ボタンと同じ受理集合連動）
-    assert 'includes("pass")' in APP_JS
+    # gating: awaiting に pass が無ければ無効化（draw/play ボタンと同じ受理集合連動）
+    assert re.search(
+        r'getElementById\("pass-btn"\)\.disabled\s*=\s*!allowed\.includes\("pass"\)', APP_JS
+    )
+    # wiring: pass-btn の click ハンドラが存在する（無効化行だけでは満たせない）
+    assert re.search(r'getElementById\("pass-btn"\)\.addEventListener\(\s*"click"', APP_JS)
+    # wiring: その送信ペイロードが pass アクション（オブジェクトリテラル形。
+    # includes("pass") とは別物で、click 結線が消えれば失われる）
+    assert re.search(r'type:\s*"pass"', APP_JS)
 
 
 # --- WS 往復（フロントが送る実ペイロードがサーバと整合するか） ---------------
