@@ -92,6 +92,13 @@ def jump_in(current, ctx):
     return same_card_type(ctx.card, ctx.top_of_pile)   # 色・数字・記号すべて一致
 ```
 
+> 実装との対応（`rules/jump_in.py`, #27）: 上の permit だけでは不十分。`standard_can_play` は
+> 手番を問わず色 OR 記号一致を許すため、手番外プレイに permit を足すだけだと「色のみ/記号のみ
+> 一致」でも割り込めてしまう。実装は**制限**（手番外＝`ctx.action.player != ctx.current_player`
+> のとき完全一致以外を `False`）で表現し、あわせて `awaiting` に手番外プレイヤーの割り込み枠を
+> 張る（`on_turn_end`）／割り込んだ本人を手番者に据える（`on_after_play`）。特殊札の手番外
+> 割り込みは土台対象外として明示的に弾く。
+
 **制限を課すルール**（前がどうであれ却下）は、条件に反するとき `False` を返す。制限したい許可ルールより**後ろ**に置く。
 
 ```python
