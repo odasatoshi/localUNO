@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>local-UNO</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>local-UNO</h1>
+      <div id="status" class="status">接続中…</div>
+    </header>
+
+    <main>
+      <!-- 相手（枚数のみ公開） -->
+      <section id="opponent" class="zone">
+        <h2>相手</h2>
+        <div id="opponent-count" class="count"></div>
+      </section>
+
+      <!-- 場（捨て山トップ・山札残・強制色） -->
+      <section id="table" class="zone">
+        <div class="pile">
+          <div class="label">捨て山</div>
+          <div id="discard-top" class="card-slot"></div>
+        </div>
+        <div class="pile">
+          <div class="label">山札</div>
+          <div id="draw-count" class="count"></div>
+        </div>
+        <div class="pile">
+          <div class="label">強制色</div>
+          <div id="forced-color" class="forced-color"></div>
+        </div>
+      </section>
+
+      <!-- 色選択（ワイルド時のみ表示） -->
+      <section id="color-picker" class="color-picker hidden">
+        <div class="label">色を選択</div>
+        <button class="color-btn" data-color="red">赤</button>
+        <button class="color-btn" data-color="yellow">黄</button>
+        <button class="color-btn" data-color="green">緑</button>
+        <button class="color-btn" data-color="blue">青</button>
+      </section>
+
+      <!-- 自分の手札 -->
+      <section id="you" class="zone">
+        <h2>あなた（<span id="me"></span>）</h2>
+        <div id="hand" class="hand"></div>
+        <div class="controls">
+          <button id="draw-btn">引く</button>
+          <button id="reset-btn">リセット（再戦）</button>
+        </div>
+      </section>
+
+      <div id="banner" class="banner hidden"></div>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
