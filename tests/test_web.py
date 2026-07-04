@@ -175,6 +175,27 @@ def test_app_js_declare_uno_wired_and_gated_by_state():
     assert re.search(r'toggleClass\(\s*[^;]*?uno-btn[^;]*?"hidden"', APP_JS, re.S)
 
 
+def test_index_has_challenge_button():
+    """「UNO言ってない!」指摘ボタンが UI にある（#71）。"""
+    assert 'id="challenge-btn"' in INDEX
+
+
+def test_app_js_challenge_uno_wired_and_gated_by_state():
+    """指摘は相手の state（枚数・宣言済み）から出し分け、challenge_uno を送る（#71）。
+
+    challenge_uno も awaiting に載らない常時受理アクション。相手 hand_counts / 相手の
+    uno_declared から表示を制御する。gating と wiring を分離検証する。
+    """
+    # wiring: challenge-btn の click ハンドラで challenge_uno を送る
+    assert re.search(
+        r'getElementById\("challenge-btn"\)\.addEventListener\(\s*"click"', APP_JS
+    )
+    assert re.search(r'type:\s*"challenge_uno"', APP_JS)
+    # gating 固有: challenge-btn の hidden を「相手の枚数（oppCount）」で出し分ける
+    # 結線（UNO! 側の hand_counts 参照では満たせない＝指摘が相手側を見ることを特定）
+    assert re.search(r'toggleClass\(\s*[^;]*?challenge-btn[^;]*?oppCount', APP_JS, re.S)
+
+
 # --- WS 往復（フロントが送る実ペイロードがサーバと整合するか） ---------------
 
 
@@ -291,6 +312,25 @@ def test_ws_declare_uno_is_accepted_over_ws():
             assert msg["type"] == "state"  # error でなく state（常時受理）
             # 7枚では no-op: 宣言は成立せず uno_declared に載らない
             assert "p1" not in msg["view"]["uno_declared"]
+
+
+def test_ws_challenge_uno_misfire_penalizes_challenger():
+    """相手が1枚でない初期に challenge_uno を送ると誤爆し、送信者が2枚引く（#71）。
+
+    challenge_uno は awaiting 非依存の常時受理。初期は相手7枚で指摘は不成立（誤爆）
+    のため challenger 本人にペナルティ2枚（7→9）が付く。WS パス＋ペナルティ配線を固定。
+    """
+    client = deterministic_client()
+    with client.websocket_connect("/ws") as ws1:
+        w1 = ws1.receive_json()
+        assert len(w1["view"]["your_hand"]) == 7
+        with client.websocket_connect("/ws") as ws2:
+            ws2.receive_json()
+            ws1.send_text(json.dumps({"type": "challenge_uno", "player": "p1"}))
+            msg = ws1.receive_json()
+            assert msg["type"] == "state"  # 受理される
+            # 誤爆: 送信者 p1 にペナルティ2枚（7→9）
+            assert msg["view"]["hand_counts"]["p1"] == 9
 
 
 def test_ws_reconnect_restores_hand_via_token():
