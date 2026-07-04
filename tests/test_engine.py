@@ -349,6 +349,25 @@ def test_multi_card_effect_hook_sees_played_cards():
     assert seen == [(1, 2)]
 
 
+def test_single_play_sets_played_cards_singleton():
+    """単数プレイでも played_cards は要素1個（後方互換の要）。"""
+    seen = []
+    reg = build_registry(
+        [PERMISSIVE, {ON_AFTER_PLAY: lambda s, ctx: seen.append(ctx.played_cards) or s}]
+    )
+    st = _multi_state()
+    apply_action(reg, st, PlayAction("p1", (1,)))
+    assert seen == [(st.hands["p1"][0],)]  # (card,) の単一要素タプル
+
+
+def test_multi_card_with_missing_id_rejected_no_partial_apply():
+    """複数出しで一部 id が手札に無ければ IllegalAction（部分適用されない）。"""
+    reg = build_registry([PERMISSIVE, {CAN_STACK: lambda c, ctx: True}])
+    st = _multi_state()  # p1 手札は id 1,2 のみ
+    with pytest.raises(IllegalAction):
+        apply_action(reg, st, PlayAction("p1", (1, 99999)))
+
+
 # --- #35 基盤拡張: UNO! / 指摘 は常時受理の割り込み --------------------------
 
 
@@ -364,9 +383,14 @@ def test_declare_uno_accepted_out_of_turn_without_advancing():
 
 
 def test_challenge_uno_accepted_out_of_turn():
-    """challenge_uno（UNO言ってない!）も常時受理の割り込みで on_challenge_uno を回す。"""
+    """challenge_uno（UNO言ってない!）も常時受理の割り込みで on_challenge_uno を回す。
+
+    宣言側と対称に、手番・awaiting を消費しない（割り込み）ことも担保する。
+    """
     fired = []
     reg = build_registry([{ON_CHALLENGE_UNO: lambda s, ctx: fired.append(ctx.action.player) or s}])
     st = GameState.new_game(P, 1)
-    apply_action(reg, st, ChallengeUnoAction("p2"))
+    out = apply_action(reg, st, ChallengeUnoAction("p2"))
     assert fired == ["p2"]
+    assert out.current_player == st.current_player  # 手番送りしない
+    assert out.awaiting == st.awaiting  # awaiting も不変

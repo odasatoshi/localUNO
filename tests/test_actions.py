@@ -74,8 +74,12 @@ def test_reject_empty_card_ids():
 
 
 def test_reject_duplicate_card_ids():
+    # parse 経路
     with pytest.raises(ActionError):
         parse({"type": "play", "player": "p1", "card_ids": [5, 5]})
+    # 直接構築（parse を経由しない内部経路。物理カード複製の不変条件違反を型で弾く）
+    with pytest.raises(ActionError):
+        PlayAction(player="p1", card_ids=(5, 5))
 
 
 def test_choose_color_serializes_color_as_str():

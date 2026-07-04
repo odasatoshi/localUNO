@@ -160,6 +160,10 @@ class PlayAction(Action):
         super().__post_init__()
         if not isinstance(self.card_ids, tuple) or not self.card_ids:
             raise ActionError("card_ids は非空タプルであること")
+        # 重複は物理カードの複製（捨て山に同一カードが2度積まれる）を招くため型レベルで
+        # 弾く。parse 経路(coerce_card_ids)だけでなく直接構築でも不変条件を担保する。
+        if len(set(self.card_ids)) != len(self.card_ids):
+            raise ActionError("card_ids に重複がある")
 
     @property
     def card_id(self) -> int:
