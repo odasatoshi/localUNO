@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from ..engine.hooks import HookRegistry, build_registry
-from . import reverse_off, standard
+from . import reverse_off, standard, win_unrestricted
 from .standard import setup_game
 
 # 有効化リスト（起動時固定・記述順）。先頭は必ず standard。
@@ -17,6 +17,7 @@ from .standard import setup_game
 ENABLED_RULES = [
     standard.RULES,
     reverse_off.RULES,  # #36 リバース無効化（§1）
+    win_unrestricted.RULES,  # #39 上がり制限撤廃（§5）
 ]
 
 
@@ -31,4 +32,5 @@ __all__ = [
     "setup_game",
     "standard",
     "reverse_off",
+    "win_unrestricted",
 ]

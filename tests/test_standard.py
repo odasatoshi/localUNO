@@ -93,7 +93,9 @@ def test_can_play_respects_forced_color():
 
 
 def test_cannot_win_on_wild_restriction():
-    reg = registry()
+    # standard 単体の制限を担保する（active な ENABLED_RULES ではローカルルール #39
+    # win_unrestricted がこれを撤廃する。active 側は test_win_unrestricted が担保）。
+    reg = build_registry([standard.RULES])
     st = state_with(
         p1=(card(WILD, None, 1),),  # 最後の1枚がワイルド
         p2=(card("9", Color.GREEN, 2),),
