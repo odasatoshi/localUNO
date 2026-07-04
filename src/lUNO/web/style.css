@@ -175,6 +175,13 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* UNO! 宣言ボタン: 見逃さないよう強調 */
+.uno-btn {
+  background: var(--red);
+  color: #fff;
+  font-weight: bold;
+}
+
 .color-picker {
   display: flex;
   gap: 0.5rem;

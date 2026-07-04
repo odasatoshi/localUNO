@@ -146,6 +146,18 @@ function render(view) {
   // 選択（クリア済み）を反映して「出す」ボタンとバッジを初期化。
   refreshSelectionUI();
 
+  // UNO 宣言/指摘は awaiting に載らない常時受理アクション。state（手札枚数・
+  // 宣言済み集合・終局）から表示を出し分ける（判定・ペナルティはサーバ, 権威）。
+  const declared = view.uno_declared || [];
+  const over = Boolean(view.winner);
+  const myCount = (view.hand_counts && view.hand_counts[me]) || 0;
+  // 自分が1枚・未宣言・未終局のときだけ「UNO!」を出す。
+  toggleClass(
+    document.getElementById("uno-btn"),
+    "hidden",
+    over || myCount !== 1 || declared.includes(me),
+  );
+
   // 手番・勝敗の表示
   const banner = document.getElementById("banner");
   if (view.winner) {
@@ -226,6 +238,9 @@ function wireControls() {
   });
   document.getElementById("pass-btn").addEventListener("click", () => {
     send({ type: "pass", player: state.me });
+  });
+  document.getElementById("uno-btn").addEventListener("click", () => {
+    send({ type: "declare_uno", player: state.me });
   });
   document.getElementById("reset-btn").addEventListener("click", () => {
     send({ type: "reset", player: state.me });

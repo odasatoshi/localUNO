@@ -153,6 +153,28 @@ def test_app_js_pass_button_wired_and_gated_by_awaiting():
     assert re.search(r'type:\s*"pass"', APP_JS)
 
 
+def test_index_has_uno_button():
+    """「UNO!」宣言ボタンが UI にある（#70）。"""
+    assert 'id="uno-btn"' in INDEX
+
+
+def test_app_js_declare_uno_wired_and_gated_by_state():
+    """UNO! は state（手札枚数・宣言済み）から出し分け、declare_uno を送る（#70）。
+
+    declare_uno は awaiting に載らない常時受理アクションなので、awaiting ではなく
+    uno_declared / hand_counts を見て表示を制御する。gating と wiring を分離検証する。
+    """
+    # wiring: uno-btn の click ハンドラで declare_uno を送る
+    assert re.search(r'getElementById\("uno-btn"\)\.addEventListener\(\s*"click"', APP_JS)
+    assert re.search(r'type:\s*"declare_uno"', APP_JS)
+    # gating: awaiting ではなく state（uno_declared / hand_counts）で出し分ける
+    assert "uno_declared" in APP_JS
+    assert "hand_counts" in APP_JS
+    # gating 固有: uno-btn の hidden を toggleClass で出し分ける結線（wiring 行では
+    # 満たせないパターン。表示条件を消すと落ちる）
+    assert re.search(r'toggleClass\(\s*[^;]*?uno-btn[^;]*?"hidden"', APP_JS, re.S)
+
+
 # --- WS 往復（フロントが送る実ペイロードがサーバと整合するか） ---------------
 
 
@@ -251,6 +273,24 @@ def test_ws_pass_after_voluntary_draw_advances_turn():
             ws2.receive_json()
             assert passed["type"] == "state"
             assert passed["view"]["current_player"] == "p2"
+
+
+def test_ws_declare_uno_is_accepted_over_ws():
+    """declare_uno が WS 経由で受理される（error にならない）ことを固定（#70）。
+
+    declare_uno は awaiting 非依存の常時受理アクション。初手7枚では宣言は成立
+    しない（no-op）が、WS パスを貫通して state が返り、uno_declared には載らない。
+    """
+    client = deterministic_client()
+    with client.websocket_connect("/ws") as ws1:
+        ws1.receive_json()
+        with client.websocket_connect("/ws") as ws2:
+            ws2.receive_json()
+            ws1.send_text(json.dumps({"type": "declare_uno", "player": "p1"}))
+            msg = ws1.receive_json()
+            assert msg["type"] == "state"  # error でなく state（常時受理）
+            # 7枚では no-op: 宣言は成立せず uno_declared に載らない
+            assert "p1" not in msg["view"]["uno_declared"]
 
 
 def test_ws_reconnect_restores_hand_via_token():
