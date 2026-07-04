@@ -101,6 +101,33 @@ def test_wild_holder_is_not_stalemate():
     assert out.is_draw is False
 
 
+def test_forced_draw_with_cards_remaining_is_not_stalemate():
+    """強制ドロー後に山札が残る（補充可）なら、一時的に両者不出でも引き分けにしない（#74）。
+
+    ``_deck_unrefillable`` ガードが load-bearing であることを固定する回帰テスト。この
+    ガードを常時 True 化すると「山に札が残るのに引き分け」の誤検出になる（両者不出の
+    on_turn_end 経路をこのテストが実際に通す）。
+    """
+    st = _state(
+        p1=(card("8", Color.BLUE, 1),),  # 赤draw2 に出せない
+        p2=(card("9", Color.GREEN, 2),),  # 出せない
+        top=card("draw2", Color.RED, 100),
+        draw=(  # 山に4枚（いずれも赤draw2 に出せない）
+            card("1", Color.GREEN, 7),
+            card("2", Color.YELLOW, 8),
+            card("3", Color.GREEN, 9),
+            card("4", Color.YELLOW, 10),
+        ),
+        current="p2",
+        pending=2,
+        awaiting={"p2": ("draw",)},
+    )
+    out = apply(st, DrawAction("p2"))
+    assert out.is_draw is False  # 山に札が残る＝行き詰まりでない（誤検出しない）
+    assert len(out.draw_pile) == 2  # 強制2枚引いて2枚残
+    assert len(out.hands["p2"]) == 3
+
+
 def test_forced_draw_forgives_unpayable_then_draws_on_dead_deck():
     """強制ドローが山切れで払いきれない時は引ける分だけ引き（残り免除）、両者不出なら引き分け。"""
     st = _state(
