@@ -144,7 +144,7 @@ def _pctx(
 def _draw(reg: HookRegistry, state: GameState, action: DrawAction) -> GameState:
     state = state.with_awaiting({})
     n = state.pending_draw if state.pending_draw > 0 else 1
-    state = _draw_cards(state, action.player, n)
+    state = draw_cards(state, action.player, n)
     state = state.with_pending_draw(0)
     state = reg.transform(ON_DRAW, state, Ctx.from_state(state, action=action, owner=action.player))
     return _advance_if_idle(reg, state, action.player)
@@ -233,7 +233,7 @@ def _advance_if_idle(reg: HookRegistry, state: GameState, actor: str) -> GameSta
     return state.with_current_player(other).with_awaiting({other: STANDARD_TURN_ACTIONS})
 
 
-def _draw_cards(state: GameState, player: str, n: int) -> GameState:
+def draw_cards(state: GameState, player: str, n: int) -> GameState:
     """山の上から最大 n 枚引いて手札へ。山切れ時は捨て山（トップ以外）を再シャッフル。"""
     # 注: デッキ枯渇で n 枚引ききれなくても呼び出し側は pending_draw を 0 にする（土台の
     # 割り切り。二人・108枚では稀。引けなかった罰則を残す挙動が要るなら rules で拡張する）。
@@ -274,4 +274,5 @@ __all__ = [
     "ON_CHALLENGE_UNO",
     "apply_action",
     "apply_actions",
+    "draw_cards",
 ]
