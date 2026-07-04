@@ -153,6 +153,15 @@ def test_app_js_pass_button_wired_and_gated_by_awaiting():
     assert re.search(r'type:\s*"pass"', APP_JS)
 
 
+def test_app_js_shows_draw_banner():
+    """山切れ引き分け（is_draw）を banner に表示する結線がある（#74）。
+
+    winner だけでなく is_draw 分岐で banner を出す。終局として UNO 系ボタンも隠す。
+    """
+    assert "is_draw" in APP_JS
+    assert "引き分け" in APP_JS
+
+
 def test_index_has_uno_button():
     """「UNO!」宣言ボタンが UI にある（#70）。"""
     assert 'id="uno-btn"' in INDEX

@@ -75,6 +75,9 @@ class GameState:
     pending_draw: int = 0
     awaiting: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     winner: str | None = None  # 終局（上がり）表現。None=進行中（§3.6 の idle と区別する）
+    # 引き分け終局（house-rules §8）。山札が補充不能かつ両者とも出せない行き詰まりを
+    # ルールが検出して立てる。winner と同様に engine が終局として扱う（手番送りを止める）。
+    is_draw: bool = False
     # UNO 宣言済みのプレイヤー集合（house-rules §6）。手札が1枚の手で立て、枚数が
     # 増えたらクリアする（管理は state トランスフォーマ＝ルール側、§3.2）。frozenset
     # なので不変・ハッシュ可能で等価判定に含まれる。
@@ -125,6 +128,10 @@ class GameState:
 
     def with_winner(self, winner: str | None) -> GameState:
         return self.replace(winner=winner)
+
+    def with_is_draw(self, is_draw: bool) -> GameState:
+        """引き分け終局フラグを差し替える（house-rules §8）。"""
+        return self.replace(is_draw=is_draw)
 
     def with_uno_declared(self, players: Iterable[str]) -> GameState:
         """UNO 宣言済みプレイヤー集合を差し替える（house-rules §6）。"""
@@ -207,6 +214,7 @@ class PlayerView:
     current_player: str
     awaiting: Mapping[str, tuple[str, ...]]
     winner: str | None
+    is_draw: bool
     uno_declared: frozenset[str]
     drawn_card_id: int | None
 
@@ -229,6 +237,7 @@ class PlayerView:
             "current_player": self.current_player,
             "awaiting": {pid: list(actions) for pid, actions in self.awaiting.items()},
             "winner": self.winner,
+            "is_draw": self.is_draw,
             "uno_declared": sorted(self.uno_declared),
             "drawn_card_id": self.drawn_card_id,
         }
@@ -257,6 +266,7 @@ def player_view(state: GameState, player_id: str) -> PlayerView:
         current_player=state.current_player,
         awaiting=dict(state.awaiting),
         winner=state.winner,
+        is_draw=state.is_draw,
         uno_declared=state.uno_declared,
         drawn_card_id=state.drawn_card_id,
     )

@@ -105,6 +105,22 @@ def test_challenge_ignored_after_win():
     assert len(out.hands["p2"]) == 1  # 誰も引かない
 
 
+def test_challenge_and_declare_ignored_after_draw():
+    """山切れ引き分け（is_draw）後は指摘も宣言も無効（winner と対称, #74）。"""
+    st = _state(
+        p1=(card("9", Color.GREEN, 2),),
+        p2=(card("7", Color.RED, 1),),
+        draw=(card("1", Color.BLUE, 6), card("2", Color.YELLOW, 7)),
+    ).replace(is_draw=True)
+    # 指摘: 相手が1枚でも終局後なのでペナルティなし
+    out = apply(st, ChallengeUnoAction("p2"))
+    assert len(out.hands["p1"]) == 1
+    assert len(out.hands["p2"]) == 1
+    # 宣言: 1枚でも終局後なのでフラグを立てない
+    out2 = apply(st, DeclareUnoAction("p1"))
+    assert "p1" not in out2.uno_declared
+
+
 # --- 結合（実アクション列での往復） ----------------------------------------
 
 

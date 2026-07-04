@@ -149,7 +149,7 @@ function render(view) {
   // UNO 宣言/指摘は awaiting に載らない常時受理アクション。state（手札枚数・
   // 宣言済み集合・終局）から表示を出し分ける（判定・ペナルティはサーバ, 権威）。
   const declared = view.uno_declared || [];
-  const over = Boolean(view.winner);
+  const over = Boolean(view.winner) || Boolean(view.is_draw);
   const myCount = (view.hand_counts && view.hand_counts[me]) || 0;
   // 自分が1枚・未宣言・未終局のときだけ「UNO!」を出す。
   toggleClass(
@@ -166,6 +166,10 @@ function render(view) {
   const banner = document.getElementById("banner");
   if (view.winner) {
     banner.textContent = view.winner === me ? "あなたの勝ち！" : "あなたの負け…";
+    toggleClass(banner, "hidden", false);
+    setStatus("終局");
+  } else if (view.is_draw) {
+    banner.textContent = "山切れ — 引き分け";
     toggleClass(banner, "hidden", false);
     setStatus("終局");
   } else {
