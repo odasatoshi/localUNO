@@ -19,6 +19,8 @@ from lUNO.rules import (
     ENABLED_RULES,
     RULE_CATALOG,
     RuleSpec,
+    catalog_meta,
+    default_enabled_ids,
     registry,
     standard,
 )
@@ -104,6 +106,37 @@ def test_registry_empty_set_is_standard_only():
 def test_registry_ignores_unknown_ids():
     """未知の id は無視される（standard のみが組まれ、reverse_off は効かない）。"""
     assert _turn_after_reverse(registry({"does_not_exist"})) == "p1"
+
+
+# --- 配信メタ（catalog_meta / default_enabled_ids, #84） --------------------
+
+
+def test_default_enabled_ids_matches_default_specs():
+    """default_enabled_ids は default=True の id 集合（standard を含む）。"""
+    assert default_enabled_ids() == frozenset(s.id for s in RULE_CATALOG if s.default)
+    assert "standard" in default_enabled_ids()
+
+
+def test_catalog_meta_shape_and_order():
+    """catalog_meta は catalog 順の dict 列で、表示に必要なキーを全て持つ。"""
+    meta = catalog_meta()
+    assert [m["id"] for m in meta] == [s.id for s in RULE_CATALOG]  # 順序保存
+    for m in meta:
+        assert set(m) == {"id", "name", "section", "description", "required", "enabled"}
+
+
+def test_catalog_meta_default_all_enabled():
+    """引数なし（None）は全 default が enabled=True。"""
+    assert all(m["enabled"] for m in catalog_meta())
+
+
+def test_catalog_meta_reflects_enabled_subset():
+    """enabled_ids を渡すと該当のみ enabled、required(standard) は常に enabled。"""
+    meta = {m["id"]: m for m in catalog_meta({"reverse_off"})}
+    assert meta["reverse_off"]["enabled"] is True
+    assert meta["standard"]["enabled"] is True  # required は集合に無くても True
+    assert meta["uno_call"]["enabled"] is False  # 集合外は False
+    assert meta["standard"]["required"] is True
 
 
 def _win_on_last_wild(reg) -> bool:

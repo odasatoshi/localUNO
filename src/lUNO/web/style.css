@@ -211,6 +211,46 @@ button:disabled {
   padding: 1rem;
 }
 
+/* ローカルルール確認パネル（read-only, #84） */
+.rules-zone summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.rules-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.rule-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.rule-name {
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.rule-desc {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* 無効ルールは淡色で「効いていない」ことを示す */
+.rule-item.rule-off {
+  opacity: 0.45;
+}
+
 .hidden {
   display: none !important;
 }
