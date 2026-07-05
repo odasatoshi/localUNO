@@ -10,8 +10,9 @@
 のみを配る。多重接続は後勝ちで旧接続を閉じる（§8）。
 
 メッセージ規約:
-- server→client: ``{"type":"welcome","token","player_id","view":{...}}`` 接続時／
-  ``{"type":"state","view":{...}}`` 状態更新時／``{"type":"error","message":...}``。
+- server→client: ``{"type":"welcome","token","player_id","view":{...},"rules":[...]}`` 接続時
+  （``rules`` は有効ローカルルールのメタ配列, #84）／``{"type":"state","view":{...}}`` 状態
+  更新時／``{"type":"error","message":...}``。
 - client→server: Action の JSON（``{"type":"play","player":"p1","card_ids":[N]}`` 等。
   複数枚出し対応で ``card_ids`` はリスト, #35）。再接続は ``/ws?token=<token>``。
 """
@@ -86,6 +87,9 @@ def create_app(
                     "token": result.token,
                     "player_id": result.player_id,
                     "view": result.view.to_dict(),
+                    # 有効ローカルルールのメタ（確認パネル用, #84）。静的情報なので
+                    # 接続時に一度だけ配る。判定はサーバ権威、フロントは表示のみ。
+                    "rules": session.rules_meta(),
                 }
             )
             while True:

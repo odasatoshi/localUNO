@@ -23,6 +23,8 @@ const state = {
   selected: [],
   // 直近の awaiting に play が含まれるか（「出す」ボタンの有効条件の一つ）。
   canPlay: false,
+  // 有効ローカルルールのメタ（welcome で一度届く。確認パネルの表示用, #84）。
+  rules: null,
 };
 
 // --- 通信 ------------------------------------------------------------------
@@ -67,6 +69,10 @@ function handleMessage(msg) {
   if (msg.type === "welcome") {
     localStorage.setItem(TOKEN_KEY, msg.token); // 再接続トークンを保存
     state.me = msg.player_id;
+    if (msg.rules) {
+      state.rules = msg.rules; // 有効ルールのメタ（確認パネル用, #84）
+      renderRules(msg.rules);
+    }
     render(msg.view);
   } else if (msg.type === "state") {
     render(msg.view);
@@ -93,6 +99,29 @@ function cardImg(card) {
   img.alt = card.label;
   img.title = card.label;
   return img;
+}
+
+// 有効ローカルルールの確認パネルを描画（read-only, #84）。welcome で受けたメタ配列を
+// カタログ順に並べ、有効／無効を記号と淡色で示す。判定はサーバ権威、ここは表示のみ。
+function renderRules(rules) {
+  const list = document.getElementById("rules-list");
+  if (!list) return;
+  list.replaceChildren();
+  (rules || []).forEach((r) => {
+    const li = document.createElement("li");
+    li.className = "rule-item";
+    toggleClass(li, "rule-off", !r.enabled);
+    const name = document.createElement("span");
+    name.className = "rule-name";
+    const sec = r.section ? r.section + " " : "";
+    name.textContent = (r.enabled ? "✓ " : "× ") + sec + r.name;
+    const desc = document.createElement("span");
+    desc.className = "rule-desc";
+    desc.textContent = r.description;
+    li.appendChild(name);
+    li.appendChild(desc);
+    list.appendChild(li);
+  });
 }
 
 function render(view) {

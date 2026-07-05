@@ -130,6 +130,32 @@ RULE_CATALOG: list[RuleSpec] = [
 ENABLED_RULES = [spec.rules for spec in RULE_CATALOG if spec.default]
 
 
+def default_enabled_ids() -> frozenset[str]:
+    """未指定時（``registry()`` 引数なし）に有効となるルール id 集合（``default=True``）。"""
+    return frozenset(s.id for s in RULE_CATALOG if s.default)
+
+
+def catalog_meta(enabled_ids: Iterable[str] | None = None) -> list[dict[str, object]]:
+    """設定・確認画面向けにカタログを配信用 dict 列へ変換する（カタログ順）。
+
+    ``enabled_ids`` は現在有効な id 集合（``None`` で全 default）。各要素に、その id が
+    有効か（``required`` は常に有効）を ``enabled`` として付す。フロントはこれを描画し、
+    選択（#85）で送り返す。判定はサーバ権威なのでフロントは表示・送信のみ。
+    """
+    enabled = default_enabled_ids() if enabled_ids is None else set(enabled_ids)
+    return [
+        {
+            "id": s.id,
+            "name": s.name,
+            "section": s.section,
+            "description": s.description,
+            "required": s.required,
+            "enabled": s.required or s.id in enabled,
+        }
+        for s in RULE_CATALOG
+    ]
+
+
 def registry(enabled_ids: Iterable[str] | None = None) -> HookRegistry:
     """フック実行器を組み立てる（カタログ順を保存）。
 
@@ -149,6 +175,8 @@ __all__ = [
     "RuleSpec",
     "RULE_CATALOG",
     "ENABLED_RULES",
+    "default_enabled_ids",
+    "catalog_meta",
     "registry",
     "setup_game",
     "standard",
