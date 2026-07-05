@@ -97,6 +97,17 @@ def test_app_js_renders_playerview_and_uses_card_images():
     assert "your_hand" in APP_JS
 
 
+def test_app_js_renders_discard_history():
+    """すて札は recent_discards を重ねて描画する（#111）。
+
+    トップ1枚だけでなく直近数枚を出した順に見せる。recent_discards が無い古い
+    サーバ応答には top_of_pile でフォールバックする（後方互換）。
+    """
+    assert "recent_discards" in APP_JS
+    assert "discard-card" in APP_JS  # 重ね描画用クラスを付与している
+    assert "top_of_pile" in APP_JS  # フォールバックが残っている
+
+
 def test_your_turn_highlights_own_zone():
     """自分の番（body[data-turn="you"]）のとき自分ゾーン .you を枠強調する（#101）。
     判定は app.js が body.dataset.turn にセット済みで、強調は CSS のみで行う。"""
@@ -467,6 +478,10 @@ def test_ws_multi_card_play_is_accepted_and_last_becomes_top():
             assert msg["type"] == "state"  # error でなく state が返る
             # 順序契約: 末尾に置いたカードが新しい捨て山トップになる
             assert msg["view"]["top_of_pile"]["id"] == group[-1]
+            # すて札履歴（#111）: 複数枚出しが「出した順」で recent_discards の末尾に載る
+            recent_ids = [c["id"] for c in msg["view"]["recent_discards"]]
+            assert recent_ids[-len(group):] == list(group)
+            assert recent_ids[-1] == group[-1]  # 末尾＝トップと一致
             # 相手視界へ即反映: p1 の手札は 7 → 5（2枚出し）
             s2 = ws2.receive_json()
             assert s2["type"] == "state"

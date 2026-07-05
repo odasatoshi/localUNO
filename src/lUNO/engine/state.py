@@ -33,6 +33,10 @@ from .cards import CardInstance, Color, Deck
 
 T = TypeVar("T")
 
+# すて札として公開する直近の枚数（複数枚出しの「何をどの順で出したか」を示すため, #111）。
+# 捨て札は公開情報なのでホワイトリスト方針に反しない（トップ以外も見せてよい）。
+RECENT_DISCARDS_SHOWN = 5
+
 
 def _readonly(mapping: Mapping) -> MappingProxyType:
     """dict を読み取り専用ビューへ正規化する（frozen のすり抜け防止）。"""
@@ -263,6 +267,9 @@ class PlayerView:
     uno_declared: frozenset[str]
     drawn_card_id: int | None
     last_event: GameEvent | None
+    # すて札の直近数枚（古い→新しい、末尾=トップ）。複数枚出しの「何をどの順で出したか」
+    # を見せるための公開情報（#111）。top_of_pile はトップ1枚の色分け表示用に併存させる。
+    recent_discards: tuple[CardInstance, ...]
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "hand_counts", _readonly(self.hand_counts))
@@ -287,6 +294,7 @@ class PlayerView:
             "uno_declared": sorted(self.uno_declared),
             "drawn_card_id": self.drawn_card_id,
             "last_event": self.last_event.to_dict() if self.last_event is not None else None,
+            "recent_discards": [_card_to_dict(c) for c in self.recent_discards],
         }
 
 
@@ -317,6 +325,7 @@ def player_view(state: GameState, player_id: str) -> PlayerView:
         uno_declared=state.uno_declared,
         drawn_card_id=state.drawn_card_id,
         last_event=state.last_event,
+        recent_discards=state.discard_pile[-RECENT_DISCARDS_SHOWN:],
     )
 
 
