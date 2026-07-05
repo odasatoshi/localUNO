@@ -2,7 +2,7 @@
 
 ローカルルールの UNO。二人対戦専用・LAN内専用。ブラウザからアクセスして遊ぶ。
 
-設計は [`docs/spec.md`](docs/spec.md)、ローカルルールの追加方法は [`docs/rule-authoring.md`](docs/rule-authoring.md) を参照。
+設計は [`docs/spec.md`](docs/spec.md)、ローカルルールの追加方法は [`docs/rule-authoring.md`](docs/rule-authoring.md)、UI デザインシステムは [`docs/design.md`](docs/design.md) を参照。
 
 ## セットアップ
 
