@@ -115,7 +115,8 @@
 
 見た目・レイアウト/インタラクション層のみ差し替える。**機能結線とサーバ権威の描画契約は保持**する。
 
-- **要素 ID を保持**（`app.js` と `tests/test_web.py` が依存）: `me · opponent-count · discard-top · draw-count · forced-color · hand · play-btn · draw-btn · pass-btn · reset-btn · uno-btn · challenge-btn · color-picker · banner · status`。
+- **要素 ID を保持**（`app.js` と `tests/test_web.py` が依存）: `me · opponent-count · discard-top · draw-count · forced-color · hand · play-btn · draw-btn · pass-btn · reset-btn · uno-btn · challenge-btn · color-picker · banner · status · rules-list`。
+  - 権威ソースは **`src/lUNO/web/app.js` の全 `getElementById` 参照 ＋ `tests/test_web.py` が検査する ID/結線**。機能追加で ID が増えることがあるため、リデザイン着手時にこの2箇所を再走査して最新の保持対象を確定すること（本一覧はスナップショット）。
 - **アクション契約を保持**: クライアントは Action の JSON を送るだけ（`play`/`draw`/`pass`/`choose_color`/`declare_uno`/`challenge_uno`/`reset`）。可否・効果・手番の判定はサーバ（原則1）。フロントはロジックを持たない。
 - **サーバ権威の描画**: 受信した PlayerView を丸ごと描き直す。差分描画はしない。
 - **テスト維持**: `tests/test_web.py` の結線検証（構造検証＋WS往復）はグリーンを保つ。UI 変更で ID/結線が変わる場合はテストも同時に更新する。
