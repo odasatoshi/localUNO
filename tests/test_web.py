@@ -69,7 +69,7 @@ def test_app_js_renders_playerview_and_uses_card_images():
 
 def test_app_js_sends_actions_as_json():
     assert "JSON.stringify" in APP_JS
-    for action_type in ("play", "draw", "pass", "choose_color", "reset"):
+    for action_type in ("play", "draw", "pass", "choose_color", "reset", "new_game"):
         assert action_type in APP_JS
 
 
@@ -78,7 +78,7 @@ def test_app_js_sends_actions_as_json():
 
 def test_app_js_has_no_engine_logic():
     """プレイ可否・シャッフル・累積等のルール/エンジン実装をフロントに持たない。"""
-    forbidden = ["can_play", "shuffle", "108", "pending_draw +", "new_game"]
+    forbidden = ["can_play", "shuffle", "108", "pending_draw +"]
     for token in forbidden:
         assert token not in APP_JS, f"フロントにロジックが混入: {token!r}"
 
@@ -188,23 +188,49 @@ def test_app_js_declare_uno_wired_and_shown_during_play():
 
 
 def test_index_has_rules_panel():
-    """ローカルルール確認パネルの受け皿が UI にある（#84）。"""
+    """ローカルルール設定パネルの受け皿と新規ゲームボタンが UI にある（#84/#85）。"""
     assert 'id="rules-list"' in INDEX
+    assert 'id="new-game-btn"' in INDEX
 
 
 def test_app_js_renders_rules_from_welcome():
-    """welcome の rules を受け取り renderRules で確認パネルへ描画する（#84）。
+    """welcome の rules を受け取り renderRules で設定パネルへ描画する（#84）。
 
-    rules は awaiting/state ではなく welcome に載る静的メタ。フロントは表示のみ
-    （有効/無効の判定はサーバ権威）。gating と描画の結線を検証する。
+    rules は welcome（と new_game 後の state）に載るメタ。フロントは表示・選択の送信のみ
+    （有効/無効の判定はサーバ権威）。描画の結線を検証する。
     """
-    # welcome の rules を保持して描画関数へ渡す結線
     assert re.search(r"msg\.rules", APP_JS)
     assert re.search(r"renderRules\(", APP_JS)
-    # renderRules が rules-list を埋める（enabled と section を参照して描画する）
     assert re.search(r'getElementById\("rules-list"\)', APP_JS)
     assert re.search(r"\.enabled", APP_JS)
     assert re.search(r"\.section", APP_JS)
+
+
+def test_app_js_rules_panel_uses_checkboxes():
+    """設定パネルは各ルールをチェックボックスにし、required は disabled にする（#85）。"""
+    assert re.search(r'type\s*=\s*"checkbox"', APP_JS) or re.search(
+        r'\.type\s*=\s*"checkbox"', APP_JS
+    )
+    assert re.search(r"\.required", APP_JS)  # required を disabled 判定に使う
+    assert re.search(r"ruleId", APP_JS)  # 各チェックに rule id を紐付ける
+
+
+def test_app_js_new_game_wired_with_selected_rule_ids():
+    """新規ゲームボタンでチェック済み id を集め new_game を送る（#85）。"""
+    assert re.search(
+        r'getElementById\("new-game-btn"\)\.addEventListener\(\s*"click"', APP_JS
+    )
+    assert re.search(r'type:\s*"new_game"', APP_JS)
+    assert re.search(r"enabled_rule_ids", APP_JS)
+
+
+def test_app_js_updates_panel_on_new_game_state():
+    """new_game 後の state に rules が載っていれば設定パネルを更新する（#85）。
+
+    通常の手番更新（rules 無し）では再描画せず、途中のチェック操作を保持する。
+    """
+    # state 分岐で msg.rules を条件に renderRules を呼ぶ結線がある
+    assert re.search(r'"state"[\s\S]{0,200}msg\.rules', APP_JS)
 
 
 def test_index_has_challenge_button():

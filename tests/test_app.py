@@ -117,6 +117,55 @@ def test_ws_welcome_rules_reflect_enabled_subset(tmp_path):
         assert rules["uno_call"]["enabled"] is False  # 集合外は無効
 
 
+def test_ws_new_game_broadcasts_state_with_updated_rules(tmp_path):
+    """new_game で両クライアントへ state が飛び、更新後の rules が同梱される（#85）。"""
+    client = make_client(tmp_path)
+    with client.websocket_connect("/ws") as ws1:
+        ws1.receive_json()  # welcome
+        with client.websocket_connect("/ws") as ws2:
+            ws2.receive_json()  # welcome
+            ws1.send_text(
+                '{"type":"new_game","player":"p1","enabled_rule_ids":["reverse_off"]}'
+            )
+            s1 = ws1.receive_json()
+            s2 = ws2.receive_json()
+            for s in (s1, s2):
+                assert s["type"] == "state"
+                assert "rules" in s  # new_game 後は rules を同梱
+                meta = {r["id"]: r for r in s["rules"]}
+                assert meta["reverse_off"]["enabled"] is True
+                assert meta["standard"]["enabled"] is True  # required
+                assert meta["uno_call"]["enabled"] is False
+            assert len(s1["view"]["your_hand"]) == 7  # 再配札
+
+
+def test_ws_normal_action_broadcast_omits_rules(tmp_path):
+    """通常の手番更新（draw 等）では rules を同梱しない（設定パネルの途中操作を消さない, #85）。"""
+    client = make_client(tmp_path)
+    with client.websocket_connect("/ws") as ws1:
+        ws1.receive_json()
+        with client.websocket_connect("/ws") as ws2:
+            ws2.receive_json()
+            ws1.send_text('{"type":"draw","player":"p1"}')
+            s1 = ws1.receive_json()
+            assert s1["type"] == "state"
+            assert "rules" not in s1
+
+
+def test_ws_new_game_unknown_rule_id_returns_error(tmp_path):
+    """未知のルールID の new_game は error を返す（弾く, #85）。"""
+    client = make_client(tmp_path)
+    with client.websocket_connect("/ws") as ws1:
+        ws1.receive_json()
+        with client.websocket_connect("/ws") as ws2:
+            ws2.receive_json()
+            ws1.send_text(
+                '{"type":"new_game","player":"p1","enabled_rule_ids":["bogus"]}'
+            )
+            m = ws1.receive_json()
+            assert m["type"] == "error"
+
+
 def test_ws_third_connection_rejected(tmp_path):
     client = make_client(tmp_path)
     with client.websocket_connect("/ws") as ws1:

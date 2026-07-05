@@ -13,11 +13,14 @@
     </header>
 
     <main>
-      <!-- 有効なローカルルール（確認・read-only, #84） -->
+      <!-- ローカルルール（確認 #84 ＋ 新規ゲーム時の ON/OFF 設定 #85） -->
       <section id="rules" class="zone rules-zone">
         <details open>
-          <summary>ローカルルール</summary>
+          <summary>ローカルルール設定</summary>
           <ul id="rules-list" class="rules-list"></ul>
+          <div class="controls">
+            <button id="new-game-btn">この設定で新規ゲーム</button>
+          </div>
         </details>
       </section>
 
