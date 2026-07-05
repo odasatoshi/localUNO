@@ -146,18 +146,14 @@ function render(view) {
   // 選択（クリア済み）を反映して「出す」ボタンとバッジを初期化。
   refreshSelectionUI();
 
-  // UNO 宣言/指摘は awaiting に載らない常時受理アクション。state（手札枚数・
-  // 宣言済み集合・終局）から表示を出し分ける（判定・ペナルティはサーバ, 権威）。
-  const declared = view.uno_declared || [];
+  // UNO 宣言/指摘は awaiting に載らない常時受理アクション。判定・ペナルティは
+  // サーバ（サーバ権威）。UI は対局中は常時表示し、終局時のみ隠す。
   const over = Boolean(view.winner) || Boolean(view.is_draw);
-  const myCount = (view.hand_counts && view.hand_counts[me]) || 0;
-  // 自分が1枚・未宣言・未終局のときだけ「UNO!」を出す。
-  toggleClass(
-    document.getElementById("uno-btn"),
-    "hidden",
-    over || myCount !== 1 || declared.includes(me),
-  );
-  // 「UNO言ってない!」（指摘）は対局中いつでも可能にする（house-rules §6 の駆け引き）。
+  // 「UNO!」は対局中いつでも押せる（house-rules §6 の誤宣言＝2枚ドロー, #79/#80）。
+  // 手札1枚・未宣言なら正当宣言、1枚・宣言済みは no-op、2枚以上は誤宣言でペナルティ
+  // （すべてサーバが判定）。
+  toggleClass(document.getElementById("uno-btn"), "hidden", over);
+  // 「UNO言ってない!」（指摘）も対局中いつでも可能にする（house-rules §6 の駆け引き）。
   // 相手が該当しないのに突けば誤爆で自分が2枚ドロー、正しく突けば相手が2枚。成否と
   // ペナルティはサーバが判定（サーバ権威）。UI は終局時のみ隠す。
   toggleClass(document.getElementById("challenge-btn"), "hidden", over);
