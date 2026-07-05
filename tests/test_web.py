@@ -42,9 +42,18 @@ def test_serves_index_app_js_style(client: TestClient):
     assert client.get("/style.css").status_code == 200
 
 
-def test_index_references_assets():
-    assert "/app.js" in INDEX
-    assert "/style.css" in INDEX
+def test_index_references_assets_base_relative():
+    """アセットは**ベース相対**（先頭スラなし）で参照する（サブパス配信対応）。
+
+    リバースプロキシ配下（例: /luno/）では絶対パス "/style.css" はサイト root に
+    飛んで 404 になる。root 直配信でもサブパス配信でも同一 HTML で動くよう、
+    先頭スラ無しの相対参照を要求する（退行防止）。
+    """
+    assert 'href="style.css"' in INDEX
+    assert 'src="app.js"' in INDEX
+    # 絶対パス参照が復活していないこと（サブパス配信を壊す）
+    assert 'href="/style.css"' not in INDEX
+    assert 'src="/app.js"' not in INDEX
 
 
 def test_all_getelementbyid_targets_exist_in_index():
@@ -66,7 +75,11 @@ def test_all_getelementbyid_targets_exist_in_index():
 
 def test_app_js_connects_websocket_to_ws():
     assert "WebSocket" in APP_JS
-    assert "/ws" in APP_JS
+    # WS URL はベース相対 "ws" を document.baseURI に解決して組む（サブパス配信対応）。
+    # 絶対 "/ws" だと /luno/ 配下でサイト root の /ws に飛んでしまう（退行防止）。
+    assert 'new URL("ws"' in APP_JS
+    assert "document.baseURI" in APP_JS
+    assert '"/ws"' not in APP_JS
 
 
 def test_app_js_persists_reconnect_token_in_localstorage():
@@ -77,7 +90,9 @@ def test_app_js_persists_reconnect_token_in_localstorage():
 
 def test_app_js_renders_playerview_and_uses_card_images():
     assert "function render" in APP_JS
-    assert "/cards/" in APP_JS  # カード画像は static PNG を参照（§7）
+    # カード画像は static PNG をベース相対で参照（§7, サブパス配信対応）。
+    assert '"cards/"' in APP_JS
+    assert '"/cards/"' not in APP_JS  # 絶対パスは /luno/ 配下を壊す（退行防止）
     assert "image_key" in APP_JS
     assert "your_hand" in APP_JS
 
