@@ -76,13 +76,14 @@ class Session:
         # 注意: registry を明示注入しつつ enabled_ids も渡すと、実行器（注入物）と
         # メタ（enabled_ids 由来の rules_meta）が乖離し得る。通常はどちらか一方のみ
         # 指定する（registry 注入はテスト用の挙動固定、enabled_ids は設定 #85 の本経路）。
-        self._enabled_ids: frozenset[str] = (
-            default_enabled_ids() if enabled_ids is None else frozenset(enabled_ids)
-        )
-        # 現在の評価順（required 先頭・カタログ順に正規化した初期順。順序編集は #93）。
+        # 初期の有効集合（未指定は全 default）。standard 補完・順序正規化は下で行う。
+        requested = default_enabled_ids() if enabled_ids is None else frozenset(enabled_ids)
+        # 現在の評価順（required 先頭・カタログ順に正規化）。_new_game と同じ正規化で、
+        # enabled_ids は常に順序（standard 含む）から導く＝単一真実源で経路差を無くす。
         self._ordered_ids: tuple[str, ...] = tuple(
-            s.id for s in RULE_CATALOG if s.required or s.id in self._enabled_ids
+            s.id for s in RULE_CATALOG if s.required or s.id in requested
         )
+        self._enabled_ids: frozenset[str] = frozenset(self._ordered_ids)
         # 実行器: registry を明示注入すればそれを、なければ enabled_ids から組む
         # （id 指定が無ければ従来どおり全 default）。
         if registry is not None:

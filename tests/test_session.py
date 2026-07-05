@@ -255,7 +255,7 @@ def test_new_game_rejects_order_violation():
     s = make_session()
     a = s.connect()
     s.connect()
-    with pytest.raises(SessionError):
+    with pytest.raises(SessionError, match="順序制約"):
         s.apply(a.token, NewGameAction("p1", enabled_rule_ids=("jump_in", "multi_play")))
 
 
