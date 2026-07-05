@@ -4,7 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>local-UNO</title>
-    <link rel="stylesheet" href="/style.css" />
+    <!-- アセットはベース相対（先頭スラなし）で参照する。root 直配信（http://host:8000/）でも
+         リバースプロキシのサブパス配信（http://host/luno/）でも同一 HTML で動くようにするため。
+         絶対パス "/style.css" だとサブパス配下でブラウザがサイト root に取りに行き 404 になる。 -->
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <!-- ゲーム盤（3ゾーン: 相手 / 場 / 自分＋操作）。PC/スマホは style.css の
@@ -92,6 +95,6 @@
       </div>
     </main>
 
-    <script src="/app.js"></script>
+    <script src="app.js"></script>
   </body>
 </html>

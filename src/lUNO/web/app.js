@@ -4,8 +4,13 @@
 // Action の JSON として送るだけ。プレイ可否・効果・手番などの判定は一切持たない
 // （サーバ権威, 原則1）。出せない札を送ってもサーバが error を返すだけ。
 //
-// - WebSocket で /ws に接続。再接続トークンは localStorage に保存し、次回接続時にクエリで渡す。
-// - カード画像は /cards/<image_key>.png を <img> で参照（§7）。
+// - WebSocket で ws に接続。再接続トークンは localStorage に保存し、次回接続時にクエリで渡す。
+// - カード画像は cards/<image_key>.png を <img> で参照（§7）。
+//
+// URL はすべて**ベース相対**（先頭スラなし）で組み立て、ドキュメントの base（現在ページの
+// ディレクトリ）に解決させる。これにより root 直配信（http://host:8000/）でもリバース
+// プロキシのサブパス配信（http://host/luno/）でも同じ JS が動く。先頭スラ付きの
+// 絶対パスだとサブパス配下でサイト root に飛び 404 になる。
 
 "use strict";
 
@@ -30,10 +35,13 @@ const state = {
 // --- 通信 ------------------------------------------------------------------
 
 function wsUrl() {
-  const proto = location.protocol === "https:" ? "wss" : "ws";
   const token = localStorage.getItem(TOKEN_KEY);
   const q = token ? "?token=" + encodeURIComponent(token) : "";
-  return proto + "://" + location.host + "/ws" + q;
+  // "ws" をドキュメント base に相対解決する（root なら /ws、/luno/ 配下なら /luno/ws）。
+  // その後 http(s) → ws(s) にスキームだけ差し替える。
+  const u = new URL("ws" + q, document.baseURI);
+  u.protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  return u.href;
 }
 
 function connect() {
@@ -104,7 +112,9 @@ function send(action) {
 function cardImg(card) {
   const img = document.createElement("img");
   img.className = "card";
-  img.src = "/cards/" + card.image_key + ".png";
+  // ベース相対（先頭スラなし）。img.src は自動で document base に解決される
+  // （root→/cards/…、/luno/ 配下→/luno/cards/…）。
+  img.src = "cards/" + card.image_key + ".png";
   img.alt = card.label;
   img.title = card.label;
   return img;
