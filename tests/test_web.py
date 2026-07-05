@@ -176,6 +176,27 @@ def test_app_js_shows_draw_banner():
     assert "引き分け" in APP_JS
 
 
+def test_index_has_cutin_element():
+    """カットイン用の要素が UI にある（#97）。"""
+    assert 'id="cutin"' in INDEX
+
+
+def test_app_js_cutin_wired_to_last_event():
+    """state の last_event でカットインを出す結線がある（#97）。
+
+    サーバが載せる出来事（UNO!/指摘/強制ドロー）を state メッセージで受けて showCutIn
+    を呼ぶ。welcome では呼ばない（再接続時の再演回避）。文言・色は last_event の kind から。
+    """
+    assert "last_event" in APP_JS
+    assert "showCutIn" in APP_JS
+    assert "cutinContent" in APP_JS
+    # state 分岐で last_event を条件に showCutIn を呼ぶ結線
+    assert re.search(r'"state"[\s\S]{0,400}last_event[\s\S]{0,80}showCutIn', APP_JS)
+    # 主要な出来事の kind を扱っている
+    for kind in ("uno", "challenge_success", "challenge_misfire", "forced_draw"):
+        assert f'"{kind}"' in APP_JS
+
+
 def test_index_has_uno_button():
     """「UNO!」宣言ボタンが UI にある（#70）。"""
     assert 'id="uno-btn"' in INDEX
