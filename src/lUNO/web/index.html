@@ -67,7 +67,7 @@
       </section>
 
       <!-- 色選択（ワイルド時のみ表示。app.js が hidden をトグル）: 盤面上のシート -->
-      <section id="color-picker" class="color-picker hidden">
+      <section id="color-picker" class="color-picker hidden" role="dialog" aria-modal="true" aria-label="色をえらぶ">
         <div class="sheet">
           <div class="label">色をえらぶ</div>
           <div class="colors">
@@ -80,7 +80,7 @@
       </section>
 
       <!-- 勝敗・引き分けバナー（app.js が hidden をトグル） -->
-      <div id="banner" class="banner hidden"></div>
+      <div id="banner" class="banner hidden" role="alert" aria-live="assertive"></div>
     </main>
 
     <script src="/app.js"></script>

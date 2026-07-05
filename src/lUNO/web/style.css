@@ -12,6 +12,12 @@
   --grape:   oklch(53% 0.20 292);
   --grape-2: oklch(63% 0.17 292);
   --focus:   oklch(60% 0.19 292);
+  /* アクセント塗り上の文字色（ライト=白 / ダーク=濃色）。明るいアクセント上の
+     白文字によるコントラスト不足を避けるためテーマで反転する。 */
+  --on-accent: oklch(100% 0 0);
+  /* カード裏面（やま札チップ）はテーマ非依存の暗色を使う（両テーマで白文字を維持） */
+  --deck-back-1: oklch(45% 0.08 292);
+  --deck-back-2: oklch(26% 0.05 292);
   /* UNO カード意味色（アクセントとは別軸） */
   --c-red:    oklch(60% 0.205 27);
   --c-yellow: oklch(83% 0.155 90);
@@ -37,6 +43,7 @@
     --grape: oklch(74% 0.15 292); --grape-2: oklch(80% 0.13 292); --focus: oklch(78% 0.15 292);
     --c-red: oklch(64% 0.20 27); --c-yellow: oklch(84% 0.15 90); --c-green: oklch(66% 0.15 150);
     --c-blue: oklch(64% 0.15 252); --c-dark: oklch(78% 0.02 300); --on-yellow: oklch(30% 0.06 90);
+    --on-accent: oklch(23% 0.03 300);
     --shadow-1: 0 1px 2px oklch(0% 0 0 / .35), 0 6px 18px oklch(0% 0 0 / .35);
     --shadow-2: 0 8px 26px oklch(0% 0 0 / .5);
     color-scheme: dark;
@@ -48,6 +55,7 @@
   --grape: oklch(74% 0.15 292); --grape-2: oklch(80% 0.13 292); --focus: oklch(78% 0.15 292);
   --c-red: oklch(64% 0.20 27); --c-yellow: oklch(84% 0.15 90); --c-green: oklch(66% 0.15 150);
   --c-blue: oklch(64% 0.15 252); --c-dark: oklch(78% 0.02 300); --on-yellow: oklch(30% 0.06 90);
+  --on-accent: oklch(23% 0.03 300);
   --shadow-1: 0 1px 2px oklch(0% 0 0 / .35), 0 6px 18px oklch(0% 0 0 / .35);
   --shadow-2: 0 8px 26px oklch(0% 0 0 / .5);
   color-scheme: dark;
@@ -81,17 +89,17 @@ h1, h2, h3 { font-family: var(--font-ui); font-style: normal; margin: 0; }
   padding: 6px 12px; border-radius: 999px;
 }
 .status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-2); flex: 0 0 auto; }
-body[data-turn="you"] .status { color: #fff; background: var(--grape); border-color: transparent; }
-body[data-turn="you"] .status::before { background: #fff; animation: pulse 1.6s ease-in-out infinite; }
+body[data-turn="you"] .status { color: var(--on-accent); background: var(--grape); border-color: transparent; }
+body[data-turn="you"] .status::before { background: var(--on-accent); animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 .ghost-btn {
   font-family: var(--font-ui); font-weight: 700; font-size: .8rem; color: var(--ink-2);
   background: transparent; border: 1px solid var(--line); border-radius: 999px;
-  padding: 0 12px; min-height: 40px; cursor: pointer; white-space: nowrap;
+  padding: 0 12px; min-height: 44px; cursor: pointer; white-space: nowrap;
   transition: color var(--ease-out) .15s, border-color var(--ease-out) .15s;
 }
 .ghost-btn:hover { color: var(--ink); border-color: var(--grape-2); }
-#theme-btn { padding: 0; width: 40px; font-size: 1rem; }
+#theme-btn { padding: 0; width: 44px; font-size: 1rem; }
 
 /* ルール設定（折りたたみ） */
 .rules-zone { background: var(--raise); border: 1px solid var(--line); border-radius: var(--radius); padding: 0 var(--s4); }
@@ -107,7 +115,7 @@ body[data-turn="you"] .status::before { background: #fff; animation: pulse 1.6s 
 /* 相手ゾーン */
 .opp { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) var(--s3); background: var(--sunk); border: 1px solid var(--line); border-radius: var(--radius); }
 .who { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-ui); font-weight: 700; font-size: .92rem; }
-.ava { width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg, var(--grape-2), var(--grape)); color: #fff; display: grid; place-items: center; font-size: .72rem; font-weight: 800; flex: 0 0 auto; }
+.ava { width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg, var(--grape-2), var(--grape)); color: var(--on-accent); display: grid; place-items: center; font-size: .72rem; font-weight: 800; flex: 0 0 auto; }
 .count { font-family: var(--font-ui); font-weight: 800; font-variant-numeric: tabular-nums; }
 .opp .count { margin-left: auto; background: var(--raise); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: .85rem; }
 
@@ -119,10 +127,10 @@ body[data-turn="you"] .status::before { background: #fff; animation: pulse 1.6s 
 }
 .pile { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .label { font-family: var(--font-ui); font-weight: 700; font-size: .72rem; color: var(--ink-2); }
-/* やま札: カード裏面風のチップ＋残数（.table の最初の pile が「やま」） */
-.table .pile:first-child .count {
+/* やま札: カード裏面風のチップ＋残数。#draw-count に直接当て DOM 順序に依存しない。 */
+#draw-count {
   display: grid; place-items: center; width: 64px; aspect-ratio: 63 / 88; border-radius: 10px; color: #fff;
-  background: radial-gradient(120% 120% at 30% 20%, oklch(45% 0.08 292), var(--c-dark)); box-shadow: var(--shadow-1);
+  background: radial-gradient(120% 120% at 30% 20%, var(--deck-back-1), var(--deck-back-2)); box-shadow: var(--shadow-1);
   font-size: 1rem; border: 2px solid oklch(100% 0 0 / .15);
 }
 .card-slot { display: grid; place-items: center; min-width: 96px; min-height: 134px; }
@@ -131,10 +139,10 @@ body[data-turn="you"] .status::before { background: #fff; animation: pulse 1.6s 
   font-family: var(--font-ui); font-weight: 800; font-size: .8rem;
   background: var(--raise); border: 1px solid var(--line); color: var(--ink-2);
 }
-.forced-color[data-color="red"]    { background: var(--c-red);    color: #fff; border-color: transparent; }
+.forced-color[data-color="red"]    { background: var(--c-red);    color: var(--on-accent); border-color: transparent; }
 .forced-color[data-color="yellow"] { background: var(--c-yellow); color: var(--on-yellow); border-color: transparent; }
-.forced-color[data-color="green"]  { background: var(--c-green);  color: #fff; border-color: transparent; }
-.forced-color[data-color="blue"]   { background: var(--c-blue);   color: #fff; border-color: transparent; }
+.forced-color[data-color="green"]  { background: var(--c-green);  color: var(--on-accent); border-color: transparent; }
+.forced-color[data-color="blue"]   { background: var(--c-blue);   color: var(--on-accent); border-color: transparent; }
 
 /* カード（実画像 <img class="card">） */
 .card { display: block; width: 72px; height: auto; border-radius: 9px; box-shadow: var(--shadow-1); }
@@ -152,10 +160,13 @@ body[data-turn="you"] .status::before { background: #fff; animation: pulse 1.6s 
 .hand .card.selected { transform: translateY(-18px); box-shadow: 0 0 0 3px var(--grape), var(--shadow-2); }
 .order-badge {
   position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
-  background: var(--grape); color: #fff; font-family: var(--font-ui); font-weight: 800;
+  background: var(--grape); color: var(--on-accent); font-family: var(--font-ui); font-weight: 800;
   font-size: .62rem; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
   display: inline-flex; align-items: center; justify-content: center; box-shadow: var(--shadow-1); white-space: nowrap; z-index: 2;
+  transition: top var(--ease-out) .16s;
 }
+/* 選択でカードが持ち上がる分、バッジも上げてカード面に重ならないようにする */
+.card-wrap:has(.card.selected) .order-badge { top: -24px; }
 
 /* 操作バー（スマホ＝下段の親指ゾーン） */
 .actions { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s2) 0 0; }
@@ -167,11 +178,11 @@ body[data-turn="you"] .status::before { background: #fff; animation: pulse 1.6s 
   transition: transform var(--ease-out) .12s, background var(--ease-out) .15s, border-color var(--ease-out) .15s;
 }
 .actions button:active { transform: translateY(1px); }
-#play-btn { background: var(--grape); color: #fff; box-shadow: var(--shadow-1); }
+#play-btn { background: var(--grape); color: var(--on-accent); box-shadow: var(--shadow-1); }
 #play-btn:hover { background: var(--grape-2); }
 #draw-btn, #pass-btn { background: var(--raise); color: var(--ink); border-color: var(--line); }
 #draw-btn:hover, #pass-btn:hover { border-color: var(--grape-2); }
-.uno-btn { background: var(--c-red); color: #fff; min-height: 44px; }
+.uno-btn { background: var(--c-red); color: var(--on-accent); min-height: 44px; }
 .challenge-btn { background: transparent; color: var(--c-red); border-color: color-mix(in oklch, var(--c-red), transparent 55%); min-height: 44px; }
 .actions button:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
 .actions button:disabled:hover { background: var(--grape); border-color: transparent; }
@@ -179,7 +190,7 @@ body[data-turn="you"] .status::before { background: #fff; animation: pulse 1.6s 
 
 /* 新規ゲームボタン（ルールパネル内） */
 #new-game-btn {
-  font-family: var(--font-ui); font-weight: 800; background: var(--grape); color: #fff;
+  font-family: var(--font-ui); font-weight: 800; background: var(--grape); color: var(--on-accent);
   border: 0; border-radius: 12px; min-height: 44px; padding: 0 var(--s4); cursor: pointer; margin-bottom: var(--s3);
 }
 #new-game-btn:hover { background: var(--grape-2); }
@@ -189,7 +200,7 @@ body[data-turn="you"] .status::before { background: #fff; animation: pulse 1.6s 
 .sheet { background: var(--paper); border: 1px solid var(--line); border-radius: 20px; padding: var(--s5); box-shadow: var(--shadow-2); text-align: center; max-width: 340px; width: 100%; animation: pop .22s var(--ease-out); }
 .sheet .label { font-size: .95rem; margin-bottom: var(--s4); }
 .colors { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
-.color-btn { min-height: 56px; border-radius: 14px; border: 0; cursor: pointer; color: #fff; font-family: var(--font-ui); font-weight: 800; box-shadow: var(--shadow-1); transition: transform var(--ease-out) .12s; }
+.color-btn { min-height: 56px; border-radius: 14px; border: 0; cursor: pointer; color: var(--on-accent); font-family: var(--font-ui); font-weight: 800; box-shadow: var(--shadow-1); transition: transform var(--ease-out) .12s; }
 .color-btn:active { transform: translateY(1px); }
 .color-btn[data-color="red"]    { background: var(--c-red); }
 .color-btn[data-color="yellow"] { background: var(--c-yellow); color: var(--on-yellow); }
@@ -197,10 +208,12 @@ body[data-turn="you"] .status::before { background: #fff; animation: pulse 1.6s 
 .color-btn[data-color="blue"]   { background: var(--c-blue); }
 @keyframes pop { from { transform: scale(.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-/* 勝敗・引き分けバナー（オーバーレイ。中身は textContent のみ） */
+/* 勝敗・引き分けバナー（オーバーレイ。中身は textContent のみ）。
+   pointer-events:none で下層のリセット/新規ゲームへクリックを透過させ、終局後も
+   再戦できるようにする（バナーは表示のみ, design.md §6）。 */
 .banner {
   position: fixed; inset: 0; z-index: 25; display: grid; place-items: center; padding: var(--s5);
-  background: oklch(20% 0.03 300 / .5); backdrop-filter: blur(3px);
+  background: oklch(20% 0.03 300 / .5); backdrop-filter: blur(3px); pointer-events: none;
   font-family: var(--font-ui); font-weight: 800; font-size: clamp(1.5rem, 6vw, 2.2rem);
   color: #fff; text-align: center; text-shadow: 0 2px 12px oklch(0% 0 0 / .4);
 }
@@ -212,7 +225,7 @@ body[data-turn="you"] .status::before { background: #fff; animation: pulse 1.6s 
   .brand { font-size: 1.25rem; }
   .opp { padding: var(--s3) var(--s5); }
   .table { gap: var(--s6); padding: var(--s6); }
-  .table .pile:first-child .count { width: 84px; }
+  #draw-count { width: 84px; }
   .card-slot { min-width: 128px; }
   .card-slot .card { width: 128px; }
   .hand { justify-content: center; padding-bottom: var(--s3); }

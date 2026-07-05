@@ -360,6 +360,10 @@ function toggleClass(el, cls, on) {
 
 window.addEventListener("DOMContentLoaded", () => {
   applyTheme(localStorage.getItem(THEME_KEY));
+  // OS のライト/ダーク変更に追従（data-theme 未設定＝自動追従のときアイコンも更新）。
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (!document.documentElement.hasAttribute("data-theme")) applyTheme(null);
+  });
   wireControls();
   connect();
 });
