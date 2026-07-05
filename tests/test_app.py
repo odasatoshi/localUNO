@@ -93,7 +93,15 @@ def test_ws_welcome_includes_rules_meta(tmp_path):
         std = next(r for r in rules if r["id"] == "standard")
         assert std["required"] is True and std["enabled"] is True
         for r in rules:
-            assert set(r) == {"id", "name", "section", "description", "required", "enabled"}
+            assert set(r) == {
+                "id",
+                "name",
+                "section",
+                "description",
+                "required",
+                "enabled",
+                "after",
+            }
 
 
 def test_ws_welcome_rules_reflect_enabled_subset(tmp_path):

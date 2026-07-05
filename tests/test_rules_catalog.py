@@ -21,6 +21,7 @@ from lUNO.rules import (
     RuleSpec,
     catalog_meta,
     default_enabled_ids,
+    order_violations,
     registry,
     standard,
 )
@@ -122,7 +123,15 @@ def test_catalog_meta_shape_and_order():
     meta = catalog_meta()
     assert [m["id"] for m in meta] == [s.id for s in RULE_CATALOG]  # 順序保存
     for m in meta:
-        assert set(m) == {"id", "name", "section", "description", "required", "enabled"}
+        assert set(m) == {
+            "id",
+            "name",
+            "section",
+            "description",
+            "required",
+            "enabled",
+            "after",
+        }
 
 
 def test_catalog_meta_default_all_enabled():
@@ -137,6 +146,66 @@ def test_catalog_meta_reflects_enabled_subset():
     assert meta["standard"]["enabled"] is True  # required は集合に無くても True
     assert meta["uno_call"]["enabled"] is False  # 集合外は False
     assert meta["standard"]["required"] is True
+
+
+# --- 前後依存（after）と順序（#92） ----------------------------------------
+
+
+def test_catalog_order_satisfies_all_after_constraints():
+    """カタログの既定順は全 after 前後制約を満たす（妥当な初期順）。"""
+    assert order_violations([s.id for s in RULE_CATALOG]) == []
+
+
+def test_after_constraints_are_within_catalog():
+    """各 after の依存先は実在ルール id（タイポ防止）。"""
+    ids = {s.id for s in RULE_CATALOG}
+    for s in RULE_CATALOG:
+        assert s.after <= ids, f"{s.id} の after に未知id: {s.after - ids}"
+
+
+def test_catalog_meta_includes_after():
+    """catalog_meta の各要素が after（依存先idのリスト）を持つ。"""
+    meta = {m["id"]: m for m in catalog_meta()}
+    assert meta["jump_in"]["after"] == sorted({"standard", "win_unrestricted", "multi_play"})
+    assert meta["standard"]["after"] == []
+
+
+def test_order_violations_detects_bad_order():
+    """依存を破る順序（制限を許可より前）を違反として検出する。"""
+    # win_unrestricted は standard より後ろ必須 → 逆順は違反
+    v = order_violations(["win_unrestricted", "standard"])
+    assert ("win_unrestricted", "standard") in v
+    # jump_in を multi_play より前に置くと違反
+    bad = order_violations(["standard", "jump_in", "multi_play"])
+    assert ("jump_in", "multi_play") in bad
+
+
+def test_order_violations_ignores_absent_dependency():
+    """依存先が並びに無ければ制約は無関係（違反にしない）。"""
+    # win_unrestricted 抜きなら jump_in の win_unrestricted 依存は無視
+    assert order_violations(["standard", "multi_play", "jump_in"]) == []
+
+
+def test_catalog_meta_order_reorders_enabled_first():
+    """order を渡すと required 先頭・指定順、未掲載はカタログ順で末尾。"""
+    meta = catalog_meta({"reverse_off", "multi_play"}, order=["multi_play", "reverse_off"])
+    ids = [m["id"] for m in meta]
+    assert ids[0] == "standard"  # required は常に先頭
+    assert ids[1:3] == ["multi_play", "reverse_off"]  # 指定順
+
+
+def test_registry_ordered_tuple_builds_in_given_order():
+    """list/tuple を渡すと与えた順で積む（standard 先頭補完）。挙動は妥当順なら不変。
+
+    reverse_off だけを順序付きで渡しても standard が補完され、リバースが手番を送る。
+    """
+    assert _turn_after_reverse(registry(("reverse_off",))) == "p2"
+
+
+def test_registry_set_still_catalog_order():
+    """set/frozenset 指定は従来どおりカタログ順（後方互換）。"""
+    assert _turn_after_reverse(registry({"reverse_off"})) == "p2"
+    assert _turn_after_reverse(registry(frozenset())) == "p1"
 
 
 def _win_on_last_wild(reg) -> bool:

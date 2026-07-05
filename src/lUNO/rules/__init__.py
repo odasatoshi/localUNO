@@ -14,8 +14,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from dataclasses import dataclass
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
 
 from ..engine.hooks import HookRegistry, Rule, build_registry
 from . import (
@@ -45,6 +45,9 @@ class RuleSpec:
     - ``rules``: 各モジュールの ``RULES`` dict（フック→ハンドラ）。
     - ``required``: 常時必須で切替不可か（``standard`` の土台）。
     - ``default``: 未指定時（``registry()`` 引数なし）に有効にするか。
+    - ``after``: このルールより**前**に来るべき依存先 id 集合（前後制約）。合成は
+      「後ろほど上書きが強い」ため、制限ルールは制限対象の許可ルールより後ろに置く
+      必要がある等の制約をここに明記する。順序編集（#92/#93）はこの制約を破れない。
     """
 
     id: str
@@ -54,6 +57,7 @@ class RuleSpec:
     rules: Rule
     required: bool = False
     default: bool = True
+    after: frozenset[str] = field(default_factory=frozenset)
 
 
 # 順序付きルールカタログ（記述順＝合成の適用順）。先頭は必ず standard（required）。
@@ -73,6 +77,7 @@ RULE_CATALOG: list[RuleSpec] = [
         section="§1",
         description="リバースを効果なしの通常カードとして扱う（手番は通常どおり相手へ）。",
         rules=reverse_off.RULES,
+        after=frozenset({"standard"}),  # ON_AFTER_PLAY: standard の awaiting を打ち消す
     ),
     RuleSpec(
         id="win_unrestricted",
@@ -80,6 +85,7 @@ RULE_CATALOG: list[RuleSpec] = [
         section="§5",
         description="最後の1枚に Wild / Wild Draw4 を含む任意のカードで上がれる。",
         rules=win_unrestricted.RULES,
+        after=frozenset({"standard"}),  # CAN_PLAY: no_win_on_wild を後勝ちで撤廃
     ),
     RuleSpec(
         id="draw2_stack",
@@ -87,6 +93,8 @@ RULE_CATALOG: list[RuleSpec] = [
         section="§3",
         description="Draw2 を出された側は Draw2 を重ねて返せる（枚数分累積）。",
         rules=draw2_stack.RULES,
+        # CAN_PLAY 制限は許可（standard/win_unrestricted）より後ろ必須
+        after=frozenset({"standard", "win_unrestricted"}),
     ),
     RuleSpec(
         id="multi_play",
@@ -94,6 +102,7 @@ RULE_CATALOG: list[RuleSpec] = [
         section="§2",
         description="同じ数字または同じ記号のカードを複数枚まとめて出せる。",
         rules=multi_play.RULES,
+        after=frozenset({"standard"}),  # ON_AFTER_PLAY: standard の効果を前提に累積
     ),
     RuleSpec(
         id="uno_call",
@@ -101,6 +110,7 @@ RULE_CATALOG: list[RuleSpec] = [
         section="§6",
         description="手札1枚で「UNO!」宣言が必須。宣言忘れの指摘・誤宣言はペナルティ。",
         rules=uno_call.RULES,
+        after=frozenset({"standard"}),  # ON_AFTER_PLAY/ON_DRAW: standard の後で整理
     ),
     RuleSpec(
         id="jump_in",
@@ -108,6 +118,8 @@ RULE_CATALOG: list[RuleSpec] = [
         section="",
         description="手番外でも場のトップと完全一致するカードなら割り込んで出せる。",
         rules=jump_in.RULES,
+        # CAN_PLAY/CAN_STACK 制限は許可ルール（standard/win_unrestricted/multi_play）の後ろ必須
+        after=frozenset({"standard", "win_unrestricted", "multi_play"}),
     ),
     RuleSpec(
         id="draw_after_play",
@@ -115,6 +127,8 @@ RULE_CATALOG: list[RuleSpec] = [
         section="§7",
         description="手番中に山から1枚引ける。引いた札が合法ならそのまま出せる。",
         rules=draw_after_play.RULES,
+        # CAN_PLAY 制限（引いた札のみリード可）は許可ルールの後ろ必須
+        after=frozenset({"standard", "win_unrestricted"}),
     ),
     RuleSpec(
         id="stalemate",
@@ -122,6 +136,8 @@ RULE_CATALOG: list[RuleSpec] = [
         section="§8",
         description="山切れで両者とも出せず進行不能なら、勝敗をつけず引き分けで終局。",
         rules=stalemate.RULES,
+        # ON_TURN_END: jump_in の割り込み枠復活を上書きするため jump_in より後ろ（末尾）必須
+        after=frozenset({"standard", "jump_in"}),
     ),
 ]
 
@@ -130,17 +146,69 @@ RULE_CATALOG: list[RuleSpec] = [
 ENABLED_RULES = [spec.rules for spec in RULE_CATALOG if spec.default]
 
 
+_CATALOG_BY_ID: dict[str, RuleSpec] = {s.id: s for s in RULE_CATALOG}
+
+
 def default_enabled_ids() -> frozenset[str]:
     """未指定時（``registry()`` 引数なし）に有効となるルール id 集合（``default=True``）。"""
     return frozenset(s.id for s in RULE_CATALOG if s.default)
 
 
-def catalog_meta(enabled_ids: Iterable[str] | None = None) -> list[dict[str, object]]:
-    """設定・確認画面向けにカタログを配信用 dict 列へ変換する（カタログ順）。
+def _ordered_specs(order: Sequence[str] | None) -> list[RuleSpec]:
+    """メタ表示用のルール並び。``order`` が無ければカタログ順。
 
-    ``enabled_ids`` は現在有効な id 集合（``None`` で全 default）。各要素に、その id が
-    有効か（``required`` は常に有効）を ``enabled`` として付す。フロントはこれを描画し、
-    選択（#85）で送り返す。判定はサーバ権威なのでフロントは表示・送信のみ。
+    ``order`` 指定時は ``required``（standard）を先頭に、続いて ``order`` の順、最後に
+    未掲載（無効ルール等）をカタログ順で並べる。未知 id は無視する。
+    """
+    if order is None:
+        return list(RULE_CATALOG)
+    result: list[RuleSpec] = []
+    seen: set[str] = set()
+    for s in RULE_CATALOG:  # required（standard）は常に先頭
+        if s.required:
+            result.append(s)
+            seen.add(s.id)
+    for rid in order:
+        s = _CATALOG_BY_ID.get(rid)
+        if s is not None and s.id not in seen:
+            result.append(s)
+            seen.add(s.id)
+    for s in RULE_CATALOG:  # 残り（無効・未掲載）はカタログ順で末尾に
+        if s.id not in seen:
+            result.append(s)
+            seen.add(s.id)
+    return result
+
+
+def order_violations(ordered_ids: Sequence[str]) -> list[tuple[str, str]]:
+    """順序が ``after`` 前後制約を満たすか検査し、違反の ``(rule, 依存先)`` 組を返す。
+
+    与えられた並びの中に両方存在する依存関係のみを見る（無効化された依存先は無関係）。
+    空リストなら妥当。順序編集（#93）と ``Session._new_game`` の検証に使う。
+    """
+    pos = {rid: i for i, rid in enumerate(ordered_ids)}
+    violations: list[tuple[str, str]] = []
+    for rid in ordered_ids:
+        spec = _CATALOG_BY_ID.get(rid)
+        if spec is None:
+            continue
+        for dep in spec.after:
+            # dep も並びに含まれ、かつ dep が rid より後ろなら制約違反
+            if dep in pos and pos[dep] > pos[rid]:
+                violations.append((rid, dep))
+    return violations
+
+
+def catalog_meta(
+    enabled_ids: Iterable[str] | None = None,
+    order: Sequence[str] | None = None,
+) -> list[dict[str, object]]:
+    """設定・確認画面向けにカタログを配信用 dict 列へ変換する。
+
+    ``enabled_ids`` は現在有効な id 集合（``None`` で全 default）。``order`` を渡すと
+    その並び（required 先頭・未掲載は末尾）で返す（``None`` はカタログ順）。各要素は有効か
+    （``required`` は常に有効）を ``enabled``、前後依存を ``after`` として持つ。判定はサーバ
+    権威なのでフロントは表示・送信のみ（``after`` は移動可否の UI 補助に使う, #93）。
     """
     enabled = default_enabled_ids() if enabled_ids is None else set(enabled_ids)
     return [
@@ -151,20 +219,28 @@ def catalog_meta(enabled_ids: Iterable[str] | None = None) -> list[dict[str, obj
             "description": s.description,
             "required": s.required,
             "enabled": s.required or s.id in enabled,
+            "after": sorted(s.after),
         }
-        for s in RULE_CATALOG
+        for s in _ordered_specs(order)
     ]
 
 
 def registry(enabled_ids: Iterable[str] | None = None) -> HookRegistry:
-    """フック実行器を組み立てる（カタログ順を保存）。
+    """フック実行器を組み立てる。
 
-    ``enabled_ids`` を省略すると全 ``default=True`` を有効にする（従来の挙動）。
-    指定すると、カタログ順に ``required`` または id が集合に含まれるルールだけを積む
-    （``standard`` 等の ``required`` は集合に無くても必ず含む・未知の id は無視）。
+    - ``None``: 全 ``default=True`` を有効（従来の挙動・後方互換）。
+    - **list/tuple（順序付き）**: 与えられた順で積む。``required``（standard）を先頭に
+      補完し、未知 id は無視する。順序が結果に効くため呼び出し側は妥当な順序（
+      :func:`order_violations` が空）を渡すこと。
+    - **set/frozenset ほか**: カタログ順に ``required`` または集合に含まれる id を積む
+      （順序の意味を持たない従来の集合指定・後方互換）。
     """
     if enabled_ids is None:
         rules = ENABLED_RULES
+    elif isinstance(enabled_ids, (list, tuple)):
+        specs = _ordered_specs(enabled_ids)
+        wanted = set(enabled_ids)
+        rules = [s.rules for s in specs if s.required or s.id in wanted]
     else:
         wanted = set(enabled_ids)
         rules = [s.rules for s in RULE_CATALOG if s.required or s.id in wanted]
@@ -177,6 +253,7 @@ __all__ = [
     "ENABLED_RULES",
     "default_enabled_ids",
     "catalog_meta",
+    "order_violations",
     "registry",
     "setup_game",
     "standard",
