@@ -44,7 +44,7 @@ from .hooks import (
     Ctx,
     HookRegistry,
 )
-from .state import GameState
+from .state import GameEvent, GameState
 
 STANDARD_TURN_ACTIONS = (PlayAction.type, DrawAction.type)
 ON_DECLARE_UNO = "on_declare_uno"
@@ -75,7 +75,9 @@ def apply_action(reg: HookRegistry, state: GameState, action: Action) -> GameSta
     handler = _DISPATCH.get(action.type)
     if handler is None:  # 保険: 既知種別は _check_accepted で先に弾かれ通常到達しない
         raise IllegalAction(f"未対応の Action 種別: {action.type!r}")
-    return handler(reg, state, action)
+    # 直近アクションの一時イベント（カットイン演出用, #97）は毎アクションでリセット。
+    # このアクション中に rules/engine が設定した分だけがブロードキャストに載る。
+    return handler(reg, state.with_last_event(None), action)
 
 
 def apply_actions(reg: HookRegistry, state: GameState, actions: Iterable[Action]) -> GameState:
@@ -149,6 +151,13 @@ def _draw(reg: HookRegistry, state: GameState, action: DrawAction) -> GameState:
     before = len(state.hands[action.player])
     state = draw_cards(state, action.player, n)
     state = state.with_pending_draw(0)
+    # 強制ドロー（Draw2/Draw4 の累積消費）は「誰が何枚引いたか」を一時イベントに載せ、
+    # フロントのカットイン（＋2/＋4）に使う（#97）。実際に引けた枚数を採用（山切れ配慮）。
+    drawn_count = len(state.hands[action.player]) - before
+    if forced and drawn_count > 0:
+        state = state.with_last_event(
+            GameEvent("forced_draw", target=action.player, amount=drawn_count)
+        )
     # ドロー後プレイ（#40）判定用に「自主ドローで引いた札」だけを渡す。強制ドローは None
     # とし、山切れで1枚しか引けなくても自主ドローと誤判定させない。
     drawn = None if forced else state.hands[action.player][before:]
