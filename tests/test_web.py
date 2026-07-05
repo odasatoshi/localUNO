@@ -98,6 +98,11 @@ def test_your_turn_highlights_own_zone():
     rm_block = STYLE_CSS[STYLE_CSS.index("prefers-reduced-motion") :]
     assert 'body[data-turn="you"] .you' in rm_block
     assert "animation: none" in rm_block
+    # 相手ゾーンや手番外へは強調を漏らさない（誤適用防止の否定アサーション）
+    assert 'body[data-turn="you"] .opp' not in STYLE_CSS
+    assert "your-turn" not in STYLE_CSS.replace("@keyframes your-turn", "").replace(
+        "animation: your-turn", ""
+    )  # 呼吸アニメは keyframes 定義と .you への結線以外に現れない
 
 
 def test_app_js_sends_actions_as_json():
