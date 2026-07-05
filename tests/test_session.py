@@ -188,7 +188,8 @@ def test_reset_keeps_tokens_and_redeals():
     assert s.player_of(b.token) == "p2"
     assert len(s.view("p1").your_hand) == 7
     assert len(s.view("p2").your_hand) == 7
-    assert s.state.current_player == "p1"
+    # 勝者がいない（DrawAction のみで未終局）再戦は先攻をランダムに決め直す（#107）。
+    assert s.state.current_player in PLAYER_IDS
 
 
 def test_reset_by_p2_also_works():
@@ -199,6 +200,64 @@ def test_reset_by_p2_also_works():
     s.apply(b.token, ResetAction("p2"))  # p2 からの再戦（reset は常時受理）
     assert len(s.view("p1").your_hand) == 7
     assert len(s.view("p2").your_hand) == 7
+
+
+# --- 先攻決定のハウスルール（初回=ランダム / 再戦=前ゲームの勝者, #107） -------
+
+
+def test_first_player_is_random_but_deterministic_per_seed():
+    """初回の先攻はランダム（seed により p1/p2 両方が現れる）かつ固定シードで再現的。"""
+    firsts = {make_session(seed=s).state.current_player for s in range(30)}
+    assert firsts == set(PLAYER_IDS)  # 先攻固定でなく両者が先攻になり得る
+    # 同じ seed なら先攻も決定的
+    assert make_session(seed=3).state.current_player == make_session(seed=3).state.current_player
+
+
+def test_reset_makes_previous_winner_go_first():
+    """再戦（reset）では前ゲームの勝者が先攻になる（#107）。"""
+    s = make_session()
+    a = s.connect()  # p1
+    s.connect()  # p2
+    s._state = s._state.with_winner("p2")  # p2 が勝った状況を作る
+    s.apply(a.token, ResetAction("p1"))
+    assert s.state.current_player == "p2"  # 勝者が先攻
+    assert s.state.awaiting == {"p2": ("play", "draw")}
+    assert s.state.winner is None  # 新盤面は未終局
+    assert len(s.view("p1").your_hand) == 7  # 先攻付け替えは盤面再生成を伴う
+    assert len(s.view("p2").your_hand) == 7
+
+
+def test_reset_after_draw_is_random_not_fixed():
+    """引き分け（勝者なし）だった場合の再戦は先攻を（勝者ではなく）ランダムに決め直す（#107）。
+
+    winner=None・is_draw=True の状況で複数 seed から再戦し、先攻が片方に固定されず
+    両者が現れることを確認する（引き分け→ランダム分岐の担保）。
+    """
+    firsts = set()
+    for seed in range(30):
+        s = make_session(seed=seed)
+        a = s.connect()
+        s.connect()
+        s._state = s._state.with_is_draw(True)  # 山切れ引き分け（winner は None）
+        s.apply(a.token, ResetAction("p1"))
+        assert s.state.winner is None
+        assert s.state.is_draw is False  # 新盤面
+        firsts.add(s.state.current_player)
+    assert firsts == set(PLAYER_IDS)  # 片方固定でなく両者が先攻になり得る
+
+
+def test_new_game_first_player_is_random_not_winner():
+    """ルール変更しての新規開始（new_game）は勝者先攻を適用せず、先攻はランダム（#107）。"""
+    # 勝者を p2 に固定しても、new_game 経路では seed 由来のランダム先攻になる。
+    winners = set()
+    for seed in range(30):
+        s = make_session(seed=seed)
+        a = s.connect()
+        s.connect()
+        s._state = s._state.with_winner("p2")
+        s.apply(a.token, NewGameAction("p1", enabled_rule_ids=()))
+        winners.add(s.state.current_player)
+    assert winners == set(PLAYER_IDS)  # 勝者(p2)固定にならず両者が現れる
 
 
 # --- new_game（ルール構成の切替＋再配札, #85） -----------------------------
@@ -316,6 +375,7 @@ def test_new_game_rebuilds_registry_behaviorally_enable():
     a = s.connect()
     s.connect()
     s.apply(a.token, NewGameAction("p1", enabled_rule_ids=("multi_play",)))
+    s._state = s._state.with_first_player("p1")  # 先攻ランダム化(#107)と切り離し、p1 の手番に固定
     s.apply(a.token, PlayAction("p1", card_ids=(1, 2)))  # 7 を2枚まとめ出し
     assert len(s.view("p1").your_hand) == 0  # 2枚出して上がり（受理された）
 
@@ -329,6 +389,7 @@ def test_new_game_rebuilds_registry_behaviorally_disable():
     a = s.connect()
     s.connect()
     s.apply(a.token, NewGameAction("p1", enabled_rule_ids=()))  # 標準のみ
+    s._state = s._state.with_first_player("p1")  # 先攻ランダム化(#107)と切り離し、p1 の手番に固定
     with pytest.raises(IllegalAction):
         s.apply(a.token, PlayAction("p1", card_ids=(1, 2)))  # 複数枚は不可
 
@@ -524,6 +585,8 @@ def test_win_by_different_player_restarts_streak():
     s.apply(a.token, PlayAction("p1", (1,)))  # p1 が1勝目（イベントなし）
     board["winner"] = "p2"  # 次の盤面は p2 が上がる
     s.apply(a.token, ResetAction("p1"))  # 再戦
+    # 再戦は前勝者(p1)が先攻(#107)だが、ここでは勝者交代シナリオを見たいので p2 手番に固定。
+    s._state = s._state.with_first_player("p2")
     st = s.apply(b.token, PlayAction("p2", (1,)))  # 今度は p2 が勝つ
     assert st.winner == "p2"
     assert st.last_event is None  # 勝者交代＝p2 の1連勝目なので連勝カットインは出ない
@@ -537,8 +600,10 @@ def test_streak_rebuilds_after_winner_change():
     s.apply(a.token, PlayAction("p1", (1,)))  # p1 の連勝（1）
     board["winner"] = "p2"
     s.apply(a.token, ResetAction("p1"))
+    # 再戦は前勝者(p1)が先攻(#107)だが、勝者交代シナリオを見たいので p2 手番に固定。
+    s._state = s._state.with_first_player("p2")
     s.apply(b.token, PlayAction("p2", (1,)))  # p2 が勝つ（p2 の1連勝目・イベントなし）
-    s.apply(a.token, ResetAction("p1"))  # 盤面は p2 のまま
+    s.apply(a.token, ResetAction("p1"))  # 盤面は p2 のまま（勝者 p2 が先攻で p2 手番）
     st = s.apply(b.token, PlayAction("p2", (1,)))  # p2 が連勝（2）
     assert st.winner == "p2"
     assert st.last_event == GameEvent("win_streak", by="p2", amount=2)

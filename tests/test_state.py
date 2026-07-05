@@ -52,6 +52,24 @@ def test_new_game_initial_awaiting_and_turn():
     assert st.pending_draw == 0
 
 
+def test_with_first_player_switches_turn_and_awaiting():
+    """with_first_player は先攻を付け替え、current_player と awaiting を揃える（#107）。"""
+    st = make_state()  # 既定は p1 先攻
+    switched = st.with_first_player("p2")
+    assert switched.current_player == "p2"
+    assert switched.awaiting == {"p2": (PlayAction.type, DrawAction.type)}
+    # 配札・山札・捨て山は先攻付け替えの影響を受けない
+    assert switched.hands == st.hands
+    assert switched.draw_pile == st.draw_pile
+    assert switched.discard_pile == st.discard_pile
+    assert st.current_player == "p1"  # 元 state は不変
+
+
+def test_with_first_player_rejects_unknown_player():
+    with pytest.raises(ValueError):
+        make_state().with_first_player("nobody")
+
+
 def test_new_game_deterministic_with_seed():
     """同一シードなら配札・盤面・RNG 状態まで再現的。== が RNG まで含めて健全。"""
     a = make_state(7)
