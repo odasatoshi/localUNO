@@ -384,6 +384,9 @@ function cutinContent(ev, me) {
       return { title: "UNO言ってない!", sub: "お手つき… " + who(ev.target) + " +" + ev.amount + "枚", tone: onMe(ev.target) ? "bad" : "good" };
     case "forced_draw":
       return { title: "+" + ev.amount, sub: who(ev.target) + "がドロー", tone: onMe(ev.target) ? "bad" : "neutral" };
+    case "win_streak":
+      // 連勝カットインは勝った本人にだけ出す（相手側は演出しない）。
+      return onMe(ev.by) ? { title: ev.amount + "連勝!", sub: "勝ち続け中！", tone: "cheer" } : null;
     default:
       return null;
   }

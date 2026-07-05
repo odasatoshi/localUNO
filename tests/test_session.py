@@ -8,10 +8,14 @@
 from __future__ import annotations
 
 import itertools
+import random
 
 import pytest
 
-from lUNO.engine.actions import DrawAction, NewGameAction, ResetAction
+from lUNO.engine.actions import DrawAction, NewGameAction, PlayAction, ResetAction
+from lUNO.engine.cards import CardInstance, CardType, Color
+from lUNO.engine.state import GameEvent, GameState
+from lUNO.rules import registry as build_registry
 from lUNO.server.session import (
     PLAYER_IDS,
     Session,
@@ -381,3 +385,160 @@ def _all_ids(obj: object) -> set[int]:
 
 def test_player_ids_are_two():
     assert PLAYER_IDS == ("p1", "p2")
+
+
+# --- 連勝カットイン（#108） -------------------------------------------------
+
+
+def _card(symbol: str, color: Color | None, cid: int) -> CardInstance:
+    return CardInstance(CardType(symbol=symbol, color=color, label=symbol), id=cid)
+
+
+def _near_win_state(players, seed) -> GameState:
+    """p1 が RED7 を1枚持ち、場は RED5。p1 が (1,) を出すと即上がりになる盤面。
+
+    連勝の積み上げを決定的に再現するため、reset のたびに同じ「あと1手で p1 勝ち」を作る。
+    """
+    return GameState(
+        hands={"p1": (_card("7", Color.RED, 1),), "p2": (_card("9", Color.GREEN, 2),)},
+        draw_pile=(_card("0", Color.RED, 6), _card("1", Color.BLUE, 7)),
+        discard_pile=(_card("5", Color.RED, 90),),
+        current_player="p1",
+        rng_state=random.Random(seed).getstate(),
+        awaiting={"p1": ("play", "draw")},
+    )
+
+
+def _streak_session() -> Session:
+    """standard のみ・毎ゲーム『あと1手で p1 勝ち』の決定的セッション。"""
+    counter = itertools.count(1)
+    return Session(
+        seed=1,
+        token_factory=lambda: f"tok{next(counter)}",
+        registry=build_registry(frozenset({"standard"})),
+        setup=_near_win_state,
+    )
+
+
+def _alternating_win_session() -> tuple[Session, dict]:
+    """勝者を切り替えられる決定的セッション。返す dict の ``winner`` を書き換えると、
+    次のセットアップ（reset/new_game）で『その人があと1手で勝つ』盤面を作る。"""
+    board = {"winner": "p1"}
+    counter = itertools.count(1)
+
+    def setup(players, seed) -> GameState:
+        w = board["winner"]
+        loser = "p2" if w == "p1" else "p1"
+        # 勝者に RED7（場の RED5 に出せる・id=1）、敗者に GREEN9（id=2）を持たせる。
+        hands = {w: (_card("7", Color.RED, 1),), loser: (_card("9", Color.GREEN, 2),)}
+        return GameState(
+            hands=hands,
+            draw_pile=(_card("0", Color.RED, 6),),
+            discard_pile=(_card("5", Color.RED, 90),),
+            current_player=w,
+            rng_state=random.Random(seed).getstate(),
+            awaiting={w: ("play", "draw")},
+        )
+
+    s = Session(
+        seed=1,
+        token_factory=lambda: f"tok{next(counter)}",
+        registry=build_registry(frozenset({"standard"})),
+        setup=setup,
+    )
+    return s, board
+
+
+def test_first_win_has_no_streak_event():
+    """1勝目は連勝ではないのでカットイン（win_streak）を出さない。"""
+    s = _streak_session()
+    a = s.connect()
+    s.connect()
+    st = s.apply(a.token, PlayAction("p1", (1,)))
+    assert st.winner == "p1"
+    assert st.last_event is None
+
+
+def test_reset_continues_streak_and_second_win_emits_event():
+    """reset（同設定で再戦）は連勝を継続。2連勝目で本人向けの win_streak が載る。"""
+    s = _streak_session()
+    a = s.connect()
+    s.connect()
+    s.apply(a.token, PlayAction("p1", (1,)))  # 1勝目
+    s.apply(a.token, ResetAction("p1"))  # 再戦（連勝継続）
+    st = s.apply(a.token, PlayAction("p1", (1,)))  # 2勝目
+    assert st.winner == "p1"
+    assert st.last_event == GameEvent("win_streak", by="p1", amount=2)
+
+
+def test_streak_accumulates_across_multiple_resets():
+    """3連勝で amount=3 まで積み上がる。"""
+    s = _streak_session()
+    a = s.connect()
+    s.connect()
+    s.apply(a.token, PlayAction("p1", (1,)))
+    s.apply(a.token, ResetAction("p1"))
+    s.apply(a.token, PlayAction("p1", (1,)))
+    s.apply(a.token, ResetAction("p1"))
+    st = s.apply(a.token, PlayAction("p1", (1,)))
+    assert st.last_event == GameEvent("win_streak", by="p1", amount=3)
+
+
+def test_new_game_resets_streak():
+    """new_game（ルール構成変更）は仕切り直しで連勝をリセットする。
+
+    観測ベース: 2連勝を作った後 new_game すると、直後の勝利は「1連勝目」に戻り
+    win_streak イベントが出ない（リセットされなければ3連勝＝amount=3 が出るはず）。
+    """
+    s = _streak_session()
+    a = s.connect()
+    s.connect()
+    s.apply(a.token, PlayAction("p1", (1,)))  # 1勝目
+    s.apply(a.token, ResetAction("p1"))
+    s.apply(a.token, PlayAction("p1", (1,)))  # 2勝目（win_streak が出ている）
+    s.apply(a.token, NewGameAction("p1", ("standard",)))  # 仕切り直し＝連勝リセット
+    st = s.apply(a.token, PlayAction("p1", (1,)))  # new_game 後の1勝目
+    assert st.winner == "p1"
+    assert st.last_event is None  # リセット済みなので連勝カットインは出ない
+
+
+def test_non_winning_action_emits_no_streak_event():
+    """勝者が立たないアクション（自主ドロー等）では連勝イベントを出さない（据え置き）。"""
+    s = _streak_session()
+    a = s.connect()
+    s.connect()
+    st = s.apply(a.token, DrawAction("p1"))  # 勝者は立たない
+    assert st.winner is None
+    assert st.last_event is None
+
+
+def test_win_by_different_player_restarts_streak():
+    """勝者が変わったら連勝は1から数え直す（前の勝者の連勝を引き継がない）。
+
+    観測ベース: p1 が1勝 → 勝者が p2 に変わって p2 が勝つと、p2 は1連勝目なので
+    win_streak は出ない（引き継いでいれば誤って amount=2 の連勝が出てしまう）。
+    """
+    s, board = _alternating_win_session()
+    a = s.connect()
+    b = s.connect()
+    s.apply(a.token, PlayAction("p1", (1,)))  # p1 が1勝目（イベントなし）
+    board["winner"] = "p2"  # 次の盤面は p2 が上がる
+    s.apply(a.token, ResetAction("p1"))  # 再戦
+    st = s.apply(b.token, PlayAction("p2", (1,)))  # 今度は p2 が勝つ
+    assert st.winner == "p2"
+    assert st.last_event is None  # 勝者交代＝p2 の1連勝目なので連勝カットインは出ない
+
+
+def test_streak_rebuilds_after_winner_change():
+    """勝者交代後は新しい勝者の連勝が1から積み上がり、2勝目で amount=2 が出る。"""
+    s, board = _alternating_win_session()
+    a = s.connect()
+    b = s.connect()
+    s.apply(a.token, PlayAction("p1", (1,)))  # p1 の連勝（1）
+    board["winner"] = "p2"
+    s.apply(a.token, ResetAction("p1"))
+    s.apply(b.token, PlayAction("p2", (1,)))  # p2 が勝つ（p2 の1連勝目・イベントなし）
+    s.apply(a.token, ResetAction("p1"))  # 盤面は p2 のまま
+    st = s.apply(b.token, PlayAction("p2", (1,)))  # p2 が連勝（2）
+    assert st.winner == "p2"
+    assert st.last_event == GameEvent("win_streak", by="p2", amount=2)

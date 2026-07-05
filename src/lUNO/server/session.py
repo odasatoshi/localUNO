@@ -24,7 +24,7 @@ from dataclasses import dataclass
 
 from ..engine.actions import Action, NewGameAction, ResetAction, parse
 from ..engine.engine import apply_action
-from ..engine.state import GameState, PlayerView, player_view
+from ..engine.state import GameEvent, GameState, PlayerView, player_view
 from ..rules import RULE_CATALOG, catalog_meta, default_enabled_ids, order_violations
 from ..rules import registry as default_registry
 from ..rules import setup_game as default_setup
@@ -97,6 +97,10 @@ class Session:
         self._token_factory = token_factory or (lambda: secrets.token_hex(16))
         self._slots: dict[str, Slot] = {}  # token -> Slot
         self._by_player: dict[str, Slot] = {}  # player_id -> Slot
+        # 連勝カウント（ゲームをまたぐ状態。GameState は毎ゲーム作り直されるので Session に持つ）。
+        # 同じプレイヤーが連続で勝った回数を数え、2連勝以上でカットイン（#108）に使う。
+        self._streak_holder: str | None = None
+        self._streak_count: int = 0
 
     # --- 参照 -------------------------------------------------------------
 
@@ -217,11 +221,38 @@ class Session:
 
         if act.type == NewGameAction.type:
             self._new_game(act.enabled_rule_ids)
+            # ルール構成を変える仕切り直しは別ゲーム扱い＝連勝をリセット（#108）。
+            self._streak_holder = None
+            self._streak_count = 0
         elif act.type == ResetAction.type:
+            # 同設定での再戦は連勝を継続（次の勝利確定時に holder と突き合わせて加算/リセット）。
             self._reset()
         else:
+            prev_winner = self._state.winner
             self._state = apply_action(self._registry, self._state, act)
+            # winner が None→確定に変化した瞬間だけ数える（勝利経路＝standard/jump_in 等に
+            # 依存しない堅い検出）。引き分け（is_draw）は winner が立たないので連勝は据え置き。
+            new_winner = self._state.winner
+            if new_winner is not None and prev_winner is None:
+                self._record_win(new_winner)
         return self._state
+
+    def _record_win(self, winner: str) -> None:
+        """勝者確定を連勝カウントへ反映し、2連勝以上なら結果 state に連勝イベントを載せる。
+
+        連勝は Session が保持する（ゲームをまたぐため）。2連勝以上のときだけ
+        ``GameEvent("win_streak", by=winner, amount=n)`` を ``with_last_event`` で載せ、
+        既存のカットイン配信経路（state ブロードキャスト）に乗せる（#108）。
+        """
+        if self._streak_holder == winner:
+            self._streak_count += 1
+        else:
+            self._streak_holder = winner
+            self._streak_count = 1
+        if self._streak_count >= 2:
+            self._state = self._state.with_last_event(
+                GameEvent("win_streak", by=winner, amount=self._streak_count)
+            )
 
     def _reset(self) -> None:
         """同じ2トークンのまま盤面を作り直す（再戦, §8）。新 seed は RNG から決定的に引く。"""

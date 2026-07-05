@@ -258,6 +258,20 @@ def test_app_js_cutin_wired_to_last_event():
         assert f'"{kind}"' in APP_JS
 
 
+def test_app_js_win_streak_cutin_only_for_winner():
+    """連勝カットイン（#108）: win_streak を扱い、勝った本人にだけ「N連勝」を出す。
+
+    サーバは1種の win_streak イベントを両者へ配るので、負けた側に出さない分岐は
+    フロント（`by === me` の判定）が担う。文言に連勝数（ev.amount）を含める。
+    """
+    assert '"win_streak"' in APP_JS
+    assert "連勝" in APP_JS
+    # 本人判定（onMe/by===me）で出し分けている: win_streak の case 内に onMe(ev.by) がある
+    case_body = APP_JS[APP_JS.index('case "win_streak"') :][:200]
+    assert "onMe(ev.by)" in case_body
+    assert "ev.amount" in case_body
+
+
 def test_index_has_uno_button():
     """「UNO!」宣言ボタンが UI にある（#70）。"""
     assert 'id="uno-btn"' in INDEX

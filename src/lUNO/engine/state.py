@@ -60,8 +60,9 @@ class GameEvent:
 
     ``kind``: ``"uno"``（正当宣言）/ ``"uno_misfire"``（誤宣言→本人ペナルティ）/
     ``"challenge_success"``（指摘成功→相手ペナルティ）/ ``"challenge_misfire"``（お手つき
-    →本人ペナルティ）/ ``"forced_draw"``（Draw2/Draw4 の強制ドロー）。
-    ``by``: 行為者 / ``target``: 影響を受けた側 / ``amount``: ドロー枚数（あれば）。
+    →本人ペナルティ）/ ``"forced_draw"``（Draw2/Draw4 の強制ドロー）/ ``"win_streak"``
+    （同じプレイヤーの2連勝以上。rules/engine ではなく Session が終局検出時に載せる, #108）。
+    ``by``: 行為者 / ``target``: 影響を受けた側 / ``amount``: ドロー枚数や連勝数（あれば）。
     """
 
     kind: str
