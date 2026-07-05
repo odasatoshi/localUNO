@@ -101,7 +101,7 @@
 - **手番ステータス**: `data-turn="you"` でグレープ背景＋点滅ドット、それ以外は静かなピル。
 - **手札選択**: タップ/クリックで選択トグル → 浮上＋リング＋順序バッジ。サーバから新 state を受けたら選択はクリア（stale 防止・サーバ権威）。
 - **色えらび（ワイルド）**: 盤面上のオーバーレイシートに4色の大きなボタン（56px）。
-- **バナー**: 勝ち（`あなたの勝ち！`）/ 負け / **引き分け（`山切れ — 引き分け`, `is_draw`）**。オーバーレイで pop-in（`pointer-events:none` で下層のリセット/新規ゲームを遮らない）、終局時は UNO 系ボタンを隠す。
+- **バナー**: 勝ち（`あなたの勝ち！`）/ 負け / **引き分け（`山切れ — 引き分け`, `is_draw`）**。オーバーレイで pop-in。バナー面は `pointer-events:none` で下層のリセット/新規ゲームを遮らないが、**中央カード（`banner-card`）＝メッセージ＋再戦ボタン（`rematch-btn`）だけは `pointer-events:auto`** でクリックを受ける（終局時の再戦導線, #99）。終局時は UNO 系ボタンを隠す。
 - **カットイン（#97）**: 「いきなり引かされた」感を消すため、直近アクションの出来事をサーバが一時イベント `last_event`（`kind: uno / uno_misfire / challenge_success / challenge_misfire / forced_draw`, `by/target/amount`）としてブロードキャストに載せ（engine が各アクション開始でクリア、rules/engine が設定、次アクションで消える。PlayerView 公開）、フロントが `state` 受信時に**中央へ大きく一瞬（約1.2秒）スライドイン→フェード**で見せる。文言は見る人視点（`あなた/あいて`）、色は tone（cheer=宣言/good=自分有利/bad=自分が損/neutral）。`welcome`（再接続）では出さない。`prefers-reduced-motion` ではスライドを止め静止表示にして時間で消す。判定・ペナルティはサーバ（原則1）、フロントは表示のみ。
 - **UI が表出すべきサーバ状態**（[`spec.md` §5 PlayerView](./spec.md)）: current_player / awaiting / 相手手札枚数 / 山札残 / 捨て山トップ / **forced_color（強制色）** / **pending_draw（累積ドロー）** / **uno_declared** / **is_draw** / **drawn_card_id（ドロー後フェーズ→パス活性）**。
 

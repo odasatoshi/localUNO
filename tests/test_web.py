@@ -176,6 +176,28 @@ def test_app_js_shows_draw_banner():
     assert "引き分け" in APP_JS
 
 
+def test_index_has_rematch_button_in_banner():
+    """終局バナー内に再戦ボタンがある（#99）。"""
+    assert 'id="rematch-btn"' in INDEX
+    assert 'id="banner-msg"' in INDEX
+    # 再戦ボタンはバナー要素の内側に置く（終局時のみ表示される導線）。banner は main
+    # 末尾要素なので、banner 開始タグより後・</main> より前にあることを確認する。
+    banner_open = INDEX.index('id="banner"')
+    main_close = INDEX.index("</main>")
+    assert banner_open < INDEX.index('id="rematch-btn"') < main_close
+    assert banner_open < INDEX.index('id="banner-msg"') < main_close
+
+
+def test_app_js_rematch_wired_to_reset():
+    """再戦ボタンの click で reset を送る（現在のルール構成のまま再配札, #99）。"""
+    assert re.search(
+        r'getElementById\("rematch-btn"\)\.addEventListener\(\s*"click"', APP_JS
+    )
+    assert re.search(r'type:\s*"reset"', APP_JS)
+    # 勝敗メッセージは banner-msg に入れる（banner.textContent だと再戦ボタンが消える）
+    assert re.search(r'getElementById\("banner-msg"\)', APP_JS)
+
+
 def test_index_has_cutin_element():
     """カットイン用の要素が UI にある（#97）。"""
     assert 'id="cutin"' in INDEX

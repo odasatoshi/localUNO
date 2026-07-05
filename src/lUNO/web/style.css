@@ -212,9 +212,10 @@ body[data-turn="you"] .status::before { background: var(--on-accent); animation:
 .color-btn[data-color="blue"]   { background: var(--c-blue); }
 @keyframes pop { from { transform: scale(.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-/* 勝敗・引き分けバナー（オーバーレイ。中身は textContent のみ）。
-   pointer-events:none で下層のリセット/新規ゲームへクリックを透過させ、終局後も
-   再戦できるようにする（バナーは表示のみ, design.md §6）。 */
+/* 勝敗・引き分けバナー（オーバーレイ）。バナー面は pointer-events:none で下層の
+   リセット/新規ゲームへクリックを透過させるが、中央カード（banner-card＝メッセージ
+   ＋再戦ボタン）だけは pointer-events:auto でクリックを受ける（終局時の再戦導線,
+   #99, design.md §6）。 */
 .banner {
   position: fixed; inset: 0; z-index: 25; display: grid; place-items: center; padding: var(--s5);
   background: oklch(20% 0.03 300 / .5); backdrop-filter: blur(3px); pointer-events: none;
@@ -222,6 +223,16 @@ body[data-turn="you"] .status::before { background: var(--on-accent); animation:
   color: #fff; text-align: center; text-shadow: 0 2px 12px oklch(0% 0 0 / .4);
 }
 .banner:not(.hidden) { animation: pop .22s var(--ease-out); }
+/* バナー内カード。バナーは pointer-events:none だがカード/ボタンは受け取る（再戦導線）。 */
+.banner-card { display: grid; gap: var(--s4); justify-items: center; pointer-events: auto; }
+#rematch-btn {
+  pointer-events: auto; font-family: var(--font-ui); font-weight: 800;
+  font-size: clamp(1rem, 3.5vw, 1.25rem); padding: var(--s3) var(--s5);
+  color: var(--on-accent); background: linear-gradient(135deg, var(--grape-2), var(--grape));
+  border: none; border-radius: 999px; cursor: pointer; box-shadow: 0 6px 20px oklch(0% 0 0 / .35);
+}
+#rematch-btn:hover { filter: brightness(1.06); }
+#rematch-btn:active { transform: translateY(1px); }
 
 /* カットイン（UNO!/指摘/強制ドローの一瞬の演出, #97）。中央に大きくスライドイン→
    ホールド→フェード。クリックは透過（pointer-events:none）。tone で色味を変える。 */
