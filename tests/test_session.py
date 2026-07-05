@@ -207,7 +207,7 @@ def test_new_game_reconfigures_enabled_and_redeals():
     s.connect()
     s.apply(a.token, DrawAction("p1"))  # 盤面を動かす
     s.apply(a.token, NewGameAction("p1", enabled_rule_ids=("reverse_off",)))
-    assert s.enabled_ids == frozenset({"reverse_off"})
+    assert s.enabled_ids == frozenset({"standard", "reverse_off"})  # standard は常時含む
     assert len(s.view("p1").your_hand) == 7  # 再配札
     assert len(s.view("p2").your_hand) == 7
     # rules_meta が新構成を反映（standard は required で常に有効、集合外は無効）
@@ -223,7 +223,7 @@ def test_new_game_empty_is_standard_only():
     a = s.connect()
     s.connect()
     s.apply(a.token, NewGameAction("p1", enabled_rule_ids=()))
-    assert s.enabled_ids == frozenset()
+    assert s.enabled_ids == frozenset({"standard"})  # required のみ
     meta = {m["id"]: m for m in s.rules_meta()}
     assert meta["standard"]["enabled"] is True  # required は常時
     assert all(not meta[k]["enabled"] for k in meta if k != "standard")
@@ -238,13 +238,34 @@ def test_new_game_rejects_unknown_rule_id():
         s.apply(a.token, NewGameAction("p1", enabled_rule_ids=("does_not_exist",)))
 
 
+def test_new_game_preserves_valid_order():
+    """妥当な順序は保持され、ordered_ids・rules_meta に反映される（#92）。"""
+    s = make_session()
+    a = s.connect()
+    s.connect()
+    # multi_play を jump_in より前に（依存を満たす妥当順）
+    s.apply(a.token, NewGameAction("p1", enabled_rule_ids=("multi_play", "jump_in")))
+    assert s.ordered_ids == ("standard", "multi_play", "jump_in")
+    meta_ids = [m["id"] for m in s.rules_meta()]
+    assert meta_ids[:3] == ["standard", "multi_play", "jump_in"]
+
+
+def test_new_game_rejects_order_violation():
+    """前後依存を破る順序（jump_in を multi_play より前）は SessionError で弾く（#92）。"""
+    s = make_session()
+    a = s.connect()
+    s.connect()
+    with pytest.raises(SessionError):
+        s.apply(a.token, NewGameAction("p1", enabled_rule_ids=("jump_in", "multi_play")))
+
+
 def test_new_game_by_p2_also_works():
     """どちらのプレイヤーからでも new_game を開始できる。"""
     s = make_session()
     s.connect()  # p1
     b = s.connect()  # p2
     s.apply(b.token, NewGameAction("p2", enabled_rule_ids=("multi_play",)))
-    assert s.enabled_ids == frozenset({"multi_play"})
+    assert s.enabled_ids == frozenset({"standard", "multi_play"})
     assert len(s.view("p1").your_hand) == 7
 
 
