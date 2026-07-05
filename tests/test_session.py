@@ -8,10 +8,14 @@
 from __future__ import annotations
 
 import itertools
+import random
 
 import pytest
 
-from lUNO.engine.actions import DrawAction, NewGameAction, ResetAction
+from lUNO.engine.actions import DrawAction, NewGameAction, PlayAction, ResetAction
+from lUNO.engine.cards import CardInstance, CardType, Color
+from lUNO.engine.state import GameEvent, GameState
+from lUNO.rules import registry as build_registry
 from lUNO.server.session import (
     PLAYER_IDS,
     Session,
@@ -381,3 +385,112 @@ def _all_ids(obj: object) -> set[int]:
 
 def test_player_ids_are_two():
     assert PLAYER_IDS == ("p1", "p2")
+
+
+# --- 連勝カットイン（#108） -------------------------------------------------
+
+
+def _card(symbol: str, color: Color | None, cid: int) -> CardInstance:
+    return CardInstance(CardType(symbol=symbol, color=color, label=symbol), id=cid)
+
+
+def _near_win_state(players, seed) -> GameState:
+    """p1 が RED7 を1枚持ち、場は RED5。p1 が (1,) を出すと即上がりになる盤面。
+
+    連勝の積み上げを決定的に再現するため、reset のたびに同じ「あと1手で p1 勝ち」を作る。
+    """
+    return GameState(
+        hands={"p1": (_card("7", Color.RED, 1),), "p2": (_card("9", Color.GREEN, 2),)},
+        draw_pile=(_card("0", Color.RED, 6), _card("1", Color.BLUE, 7)),
+        discard_pile=(_card("5", Color.RED, 90),),
+        current_player="p1",
+        rng_state=random.Random(seed).getstate(),
+        awaiting={"p1": ("play", "draw")},
+    )
+
+
+def _streak_session() -> Session:
+    """standard のみ・毎ゲーム『あと1手で p1 勝ち』の決定的セッション。"""
+    counter = itertools.count(1)
+    return Session(
+        seed=1,
+        token_factory=lambda: f"tok{next(counter)}",
+        registry=build_registry(frozenset({"standard"})),
+        setup=_near_win_state,
+    )
+
+
+def test_first_win_has_no_streak_event():
+    """1勝目は連勝ではないのでカットイン（win_streak）を出さない。"""
+    s = _streak_session()
+    a = s.connect()
+    s.connect()
+    st = s.apply(a.token, PlayAction("p1", (1,)))
+    assert st.winner == "p1"
+    assert st.last_event is None
+
+
+def test_reset_continues_streak_and_second_win_emits_event():
+    """reset（同設定で再戦）は連勝を継続。2連勝目で本人向けの win_streak が載る。"""
+    s = _streak_session()
+    a = s.connect()
+    s.connect()
+    s.apply(a.token, PlayAction("p1", (1,)))  # 1勝目
+    s.apply(a.token, ResetAction("p1"))  # 再戦（連勝継続）
+    st = s.apply(a.token, PlayAction("p1", (1,)))  # 2勝目
+    assert st.winner == "p1"
+    assert st.last_event == GameEvent("win_streak", by="p1", amount=2)
+
+
+def test_streak_accumulates_across_multiple_resets():
+    """3連勝で amount=3 まで積み上がる。"""
+    s = _streak_session()
+    a = s.connect()
+    s.connect()
+    s.apply(a.token, PlayAction("p1", (1,)))
+    s.apply(a.token, ResetAction("p1"))
+    s.apply(a.token, PlayAction("p1", (1,)))
+    s.apply(a.token, ResetAction("p1"))
+    st = s.apply(a.token, PlayAction("p1", (1,)))
+    assert st.last_event == GameEvent("win_streak", by="p1", amount=3)
+
+
+def test_new_game_resets_streak():
+    """new_game（ルール構成変更）は仕切り直しで連勝をリセットする。"""
+    s = _streak_session()
+    a = s.connect()
+    s.connect()
+    # 2連勝の状態を作ってから new_game
+    s.apply(a.token, PlayAction("p1", (1,)))
+    s.apply(a.token, ResetAction("p1"))
+    s.apply(a.token, PlayAction("p1", (1,)))
+    s.apply(a.token, NewGameAction("p1", ("standard",)))
+    assert s._streak_holder is None
+    assert s._streak_count == 0
+
+
+def test_non_winning_action_keeps_streak_untouched():
+    """勝者が立たないアクション（引き分け含む）では連勝は据え置き。"""
+    s = _streak_session()
+    a = s.connect()
+    s.connect()
+    s._streak_holder = "p1"
+    s._streak_count = 2
+    st = s.apply(a.token, DrawAction("p1"))  # 勝者は立たない
+    assert st.winner is None
+    assert s._streak_holder == "p1"
+    assert s._streak_count == 2
+
+
+def test_win_by_other_player_resets_count_to_one():
+    """別のプレイヤーが勝ったら連勝はその人の1連勝から数え直す（イベントは出ない）。"""
+    s = _streak_session()
+    a = s.connect()
+    s.connect()
+    s._streak_holder = "p2"
+    s._streak_count = 4  # 直前まで p2 が連勝していた設定
+    st = s.apply(a.token, PlayAction("p1", (1,)))  # 今回は p1 が勝つ
+    assert st.winner == "p1"
+    assert s._streak_holder == "p1"
+    assert s._streak_count == 1
+    assert st.last_event is None
