@@ -1,0 +1,19 @@
+[Unit]
+Description=local-UNO (LAN 内二人対戦 UNO)
+# ネットワーク確立後に起動。nginx とは独立（nginx はリバースプロキシとして前段に立つ）。
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=oda
+WorkingDirectory=/home/oda/localUNO
+# nginx 経由のみ公開するため 127.0.0.1 に待受を絞る（8000 をLANへ直接晒さない）。
+# uv の絶対パスは環境に合わせて調整すること（`command -v uv` で確認）。
+# 例では ~/.local/bin/uv。起動時にカード画像を差分生成してから uvicorn を立てる。
+ExecStart=/home/oda/.local/bin/uv run luno --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
