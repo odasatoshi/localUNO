@@ -82,8 +82,14 @@
       <!-- カットイン（UNO!/指摘/強制ドローの一瞬の演出。app.js が制御, #97） -->
       <div id="cutin" class="cutin hidden" role="status" aria-live="polite"></div>
 
-      <!-- 勝敗・引き分けバナー（app.js が hidden をトグル） -->
-      <div id="banner" class="banner hidden" role="alert" aria-live="assertive"></div>
+      <!-- 勝敗・引き分けバナー（app.js が hidden をトグル）。終局時のみ再戦ボタンを出す。
+           バナー自体は pointer-events:none だがカード/ボタンは auto でクリック可。 -->
+      <div id="banner" class="banner hidden" role="alert" aria-live="assertive">
+        <div class="banner-card">
+          <span id="banner-msg"></span>
+          <button id="rematch-btn" type="button">⟲ 再戦</button>
+        </div>
+      </div>
     </main>
 
     <script src="/app.js"></script>

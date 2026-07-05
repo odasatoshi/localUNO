@@ -222,6 +222,16 @@ body[data-turn="you"] .status::before { background: var(--on-accent); animation:
   color: #fff; text-align: center; text-shadow: 0 2px 12px oklch(0% 0 0 / .4);
 }
 .banner:not(.hidden) { animation: pop .22s var(--ease-out); }
+/* バナー内カード。バナーは pointer-events:none だがカード/ボタンは受け取る（再戦導線）。 */
+.banner-card { display: grid; gap: var(--s4); justify-items: center; pointer-events: auto; }
+#rematch-btn {
+  pointer-events: auto; font-family: var(--font-ui); font-weight: 800;
+  font-size: clamp(1rem, 3.5vw, 1.25rem); padding: var(--s3) var(--s5);
+  color: var(--on-accent); background: linear-gradient(135deg, var(--grape-2), var(--grape));
+  border: none; border-radius: 999px; cursor: pointer; box-shadow: 0 6px 20px oklch(0% 0 0 / .35);
+}
+#rematch-btn:hover { filter: brightness(1.06); }
+#rematch-btn:active { transform: translateY(1px); }
 
 /* カットイン（UNO!/指摘/強制ドローの一瞬の演出, #97）。中央に大きくスライドイン→
    ホールド→フェード。クリックは透過（pointer-events:none）。tone で色味を変える。 */

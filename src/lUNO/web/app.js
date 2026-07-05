@@ -278,14 +278,16 @@ function render(view) {
   // 手番をひと目で分かるよう body に印を付ける（style.css が強調表示に使う）。
   document.body.dataset.turn = over ? "over" : view.current_player === me ? "you" : "other";
 
-  // 手番・勝敗の表示
+  // 手番・勝敗の表示。終局時はバナー＋再戦ボタンを出す（メッセージは banner-msg に
+  // 入れる。banner 自体を textContent で書くと再戦ボタンが消えるため触らない）。
   const banner = document.getElementById("banner");
+  const bannerMsg = document.getElementById("banner-msg");
   if (view.winner) {
-    banner.textContent = view.winner === me ? "あなたの勝ち！" : "あなたの負け…";
+    bannerMsg.textContent = view.winner === me ? "あなたの勝ち！" : "あなたの負け…";
     toggleClass(banner, "hidden", false);
     setStatus("終局");
   } else if (view.is_draw) {
-    banner.textContent = "山切れ — 引き分け";
+    bannerMsg.textContent = "山切れ — 引き分け";
     toggleClass(banner, "hidden", false);
     setStatus("終局");
   } else {
@@ -428,6 +430,10 @@ function wireControls() {
     send({ type: "challenge_uno", player: state.me });
   });
   document.getElementById("reset-btn").addEventListener("click", () => {
+    send({ type: "reset", player: state.me });
+  });
+  // 終局バナー内の再戦ボタン。現在のルール構成のまま再配札する（reset, §8）。
+  document.getElementById("rematch-btn").addEventListener("click", () => {
     send({ type: "reset", player: state.me });
   });
   document.getElementById("new-game-btn").addEventListener("click", startNewGame);
