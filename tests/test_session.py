@@ -527,3 +527,18 @@ def test_win_by_different_player_restarts_streak():
     st = s.apply(b.token, PlayAction("p2", (1,)))  # 今度は p2 が勝つ
     assert st.winner == "p2"
     assert st.last_event is None  # 勝者交代＝p2 の1連勝目なので連勝カットインは出ない
+
+
+def test_streak_rebuilds_after_winner_change():
+    """勝者交代後は新しい勝者の連勝が1から積み上がり、2勝目で amount=2 が出る。"""
+    s, board = _alternating_win_session()
+    a = s.connect()
+    b = s.connect()
+    s.apply(a.token, PlayAction("p1", (1,)))  # p1 の連勝（1）
+    board["winner"] = "p2"
+    s.apply(a.token, ResetAction("p1"))
+    s.apply(b.token, PlayAction("p2", (1,)))  # p2 が勝つ（p2 の1連勝目・イベントなし）
+    s.apply(a.token, ResetAction("p1"))  # 盤面は p2 のまま
+    st = s.apply(b.token, PlayAction("p2", (1,)))  # p2 が連勝（2）
+    assert st.winner == "p2"
+    assert st.last_event == GameEvent("win_streak", by="p2", amount=2)
