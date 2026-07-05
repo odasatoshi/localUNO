@@ -46,6 +46,20 @@ def test_index_references_assets():
     assert "/style.css" in INDEX
 
 
+def test_all_getelementbyid_targets_exist_in_index():
+    """app.js が getElementById で参照する全 ID が index.html に存在する（#89）。
+
+    リデザイン等で index.html の構造を変えても、app.js の結線先 ID が失われれば
+    実行時に getElementById(...).xxx が TypeError になる。従来は一部 ID しか検証して
+    おらず、多くの ID は削除しても素通りした（テスト有効性の穴）。ここで app.js の
+    参照する全 ID を index.html に対して機械的に担保する。
+    """
+    referenced = set(re.findall(r'getElementById\("([a-zA-Z0-9_-]+)"\)', APP_JS))
+    assert referenced, "app.js に getElementById 参照が見つからない（正規表現要確認）"
+    missing = sorted(rid for rid in referenced if f'id="{rid}"' not in INDEX)
+    assert not missing, f"app.js が参照するが index.html に無い ID: {missing}"
+
+
 # --- 必須の結線（薄いフロントの契約） --------------------------------------
 
 
