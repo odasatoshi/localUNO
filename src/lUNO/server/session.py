@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from ..engine.actions import Action, NewGameAction, ResetAction, parse
 from ..engine.engine import apply_action
 from ..engine.state import GameState, PlayerView, player_view
-from ..rules import catalog_meta, default_enabled_ids
+from ..rules import RULE_CATALOG, catalog_meta, default_enabled_ids, order_violations
 from ..rules import registry as default_registry
 from ..rules import setup_game as default_setup
 
@@ -76,9 +76,14 @@ class Session:
         # 注意: registry を明示注入しつつ enabled_ids も渡すと、実行器（注入物）と
         # メタ（enabled_ids 由来の rules_meta）が乖離し得る。通常はどちらか一方のみ
         # 指定する（registry 注入はテスト用の挙動固定、enabled_ids は設定 #85 の本経路）。
-        self._enabled_ids: frozenset[str] = (
-            default_enabled_ids() if enabled_ids is None else frozenset(enabled_ids)
+        # 初期の有効集合（未指定は全 default）。standard 補完・順序正規化は下で行う。
+        requested = default_enabled_ids() if enabled_ids is None else frozenset(enabled_ids)
+        # 現在の評価順（required 先頭・カタログ順に正規化）。_new_game と同じ正規化で、
+        # enabled_ids は常に順序（standard 含む）から導く＝単一真実源で経路差を無くす。
+        self._ordered_ids: tuple[str, ...] = tuple(
+            s.id for s in RULE_CATALOG if s.required or s.id in requested
         )
+        self._enabled_ids: frozenset[str] = frozenset(self._ordered_ids)
         # 実行器: registry を明示注入すればそれを、なければ enabled_ids から組む
         # （id 指定が無ければ従来どおり全 default）。
         if registry is not None:
@@ -104,9 +109,14 @@ class Session:
         """現在有効なルール id 集合（確認・設定画面用）。"""
         return self._enabled_ids
 
+    @property
+    def ordered_ids(self) -> tuple[str, ...]:
+        """現在の評価順（required 先頭。順序編集 #93 で並べ替え）。"""
+        return self._ordered_ids
+
     def rules_meta(self) -> list[dict[str, object]]:
-        """カタログ全ルールのメタ＋現在の有効フラグ（welcome での配信用）。"""
-        return catalog_meta(self._enabled_ids)
+        """カタログ全ルールのメタ＋現在の有効フラグを**現在の評価順**で（welcome/state 配信用）。"""
+        return catalog_meta(self._enabled_ids, order=self._ordered_ids)
 
     def view(self, player_id: str) -> PlayerView:
         return player_view(self._state, player_id)
@@ -219,19 +229,27 @@ class Session:
         self._state = self._setup(PLAYER_IDS, seed)
 
     def _new_game(self, enabled_rule_ids: Iterable[str]) -> None:
-        """選択したルール構成で実行器を組み直し、盤面を新規に作り直す（設定変更, #85）。
+        """選択したルール構成**と順序**で実行器を組み直し、盤面を新規に作る（設定変更, #85/#92）。
 
         どちらのプレイヤーからも実行できる（`apply` のトークン整合のみ確認）。standard は
-        required で常に有効。未知の id は弾く（構成ミスの黙認防止）。enabled_ids を単一の
-        真実源として registry を必ずここから再構築する（メタと実行器の乖離を防ぐ）。
+        required で常に有効・先頭。未知の id は弾き（構成ミスの黙認防止）、前後依存（after）を
+        破る順序も弾く（silently-wrong 防止）。順序を**単一の真実源**として registry・enabled
+        集合・メタを必ずここから再構築する（実行器とメタの乖離を防ぐ）。
         """
-        ids = frozenset(enabled_rule_ids)
+        requested = list(enabled_rule_ids)
         known = {m["id"] for m in catalog_meta()}
-        unknown = sorted(ids - known)
+        unknown = sorted(set(requested) - known)
         if unknown:
             raise SessionError(f"未知のルールID: {unknown}")
-        self._enabled_ids = ids
-        self._registry = default_registry(ids)
+        # 実効順: required(standard) を先頭に、要求順の有効ルールを続ける（重複除去・順序保持）。
+        required_first = [s.id for s in RULE_CATALOG if s.required]
+        ordered = tuple(dict.fromkeys(required_first + requested))
+        violations = order_violations(ordered)
+        if violations:
+            raise SessionError(f"順序制約に違反: {violations}")
+        self._ordered_ids = ordered
+        self._enabled_ids = frozenset(ordered)
+        self._registry = default_registry(ordered)  # tuple → 与えた順で積む
         seed, _ = self._state.with_rng(lambda rng: rng.getrandbits(32))
         self._state = self._setup(PLAYER_IDS, seed)
 
