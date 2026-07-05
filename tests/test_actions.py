@@ -19,6 +19,7 @@ from lUNO.engine.actions import (
     ChooseColorAction,
     DeclareUnoAction,
     DrawAction,
+    NewGameAction,
     PassAction,
     PlayAction,
     ResetAction,
@@ -37,6 +38,8 @@ ALL_ACTIONS = [
     ChallengeUnoAction(player="p2"),
     PassAction(player="p1"),
     ResetAction(player="p1"),
+    NewGameAction(player="p1", enabled_rule_ids=("reverse_off", "uno_call")),
+    NewGameAction(player="p2", enabled_rule_ids=()),  # 標準のみ（空選択）
 ]
 
 
@@ -159,6 +162,36 @@ def test_reject_invalid_color():
 def test_reject_non_string_color():
     with pytest.raises(ActionError):
         parse({"type": "choose_color", "player": "p1", "color": None})
+
+
+# --- new_game / enabled_rule_ids（#85） -------------------------------------
+
+
+def test_new_game_parses_and_dedups_rule_ids():
+    """new_game は enabled_rule_ids を順序保持で重複除去してタプル化する。"""
+    a = parse(
+        {"type": "new_game", "player": "p1", "enabled_rule_ids": ["a", "b", "a", "c"]}
+    )
+    assert isinstance(a, NewGameAction)
+    assert a.enabled_rule_ids == ("a", "b", "c")
+
+
+def test_new_game_allows_empty_rule_ids():
+    """空リスト（ハウスルール無し・標準のみ）は許容する。"""
+    a = parse({"type": "new_game", "player": "p1", "enabled_rule_ids": []})
+    assert a.enabled_rule_ids == ()
+
+
+def test_new_game_rejects_non_list_rule_ids():
+    with pytest.raises(ActionError):
+        parse({"type": "new_game", "player": "p1", "enabled_rule_ids": "reverse_off"})
+
+
+def test_new_game_rejects_non_string_element():
+    with pytest.raises(ActionError):
+        parse({"type": "new_game", "player": "p1", "enabled_rule_ids": ["ok", 3]})
+    with pytest.raises(ActionError):
+        parse({"type": "new_game", "player": "p1", "enabled_rule_ids": [""]})
 
 
 def test_reject_empty_player():

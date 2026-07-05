@@ -22,7 +22,7 @@ import secrets
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
-from ..engine.actions import Action, ResetAction, parse
+from ..engine.actions import Action, NewGameAction, ResetAction, parse
 from ..engine.engine import apply_action
 from ..engine.state import GameState, PlayerView, player_view
 from ..rules import catalog_meta, default_enabled_ids
@@ -205,7 +205,9 @@ class Session:
         if act.player != slot.player_id:
             raise SessionError(f"トークンとプレイヤー不一致: {slot.player_id!r} != {act.player!r}")
 
-        if act.type == ResetAction.type:
+        if act.type == NewGameAction.type:
+            self._new_game(act.enabled_rule_ids)
+        elif act.type == ResetAction.type:
             self._reset()
         else:
             self._state = apply_action(self._registry, self._state, act)
@@ -213,6 +215,23 @@ class Session:
 
     def _reset(self) -> None:
         """同じ2トークンのまま盤面を作り直す（再戦, §8）。新 seed は RNG から決定的に引く。"""
+        seed, _ = self._state.with_rng(lambda rng: rng.getrandbits(32))
+        self._state = self._setup(PLAYER_IDS, seed)
+
+    def _new_game(self, enabled_rule_ids: Iterable[str]) -> None:
+        """選択したルール構成で実行器を組み直し、盤面を新規に作り直す（設定変更, #85）。
+
+        どちらのプレイヤーからも実行できる（`apply` のトークン整合のみ確認）。standard は
+        required で常に有効。未知の id は弾く（構成ミスの黙認防止）。enabled_ids を単一の
+        真実源として registry を必ずここから再構築する（メタと実行器の乖離を防ぐ）。
+        """
+        ids = frozenset(enabled_rule_ids)
+        known = {m["id"] for m in catalog_meta()}
+        unknown = sorted(ids - known)
+        if unknown:
+            raise SessionError(f"未知のルールID: {unknown}")
+        self._enabled_ids = ids
+        self._registry = default_registry(ids)
         seed, _ = self._state.with_rng(lambda rng: rng.getrandbits(32))
         self._state = self._setup(PLAYER_IDS, seed)
 
