@@ -80,6 +80,43 @@ def test_ws_welcome_and_action_broadcasts_playerview(tmp_path):
             assert s2["view"]["you"] == "p2"
 
 
+def test_ws_welcome_includes_rules_meta(tmp_path):
+    """welcome に有効ローカルルールのメタ配列が載る（確認パネル用, #84）。"""
+    client = make_client(tmp_path)
+    with client.websocket_connect("/ws") as ws1:
+        w1 = ws1.receive_json()
+        assert w1["type"] == "welcome"
+        rules = w1["rules"]
+        assert isinstance(rules, list) and rules
+        ids = [r["id"] for r in rules]
+        assert ids[0] == "standard"  # カタログ順（先頭は standard）
+        std = next(r for r in rules if r["id"] == "standard")
+        assert std["required"] is True and std["enabled"] is True
+        for r in rules:
+            assert set(r) == {"id", "name", "section", "description", "required", "enabled"}
+
+
+def test_ws_welcome_rules_reflect_enabled_subset(tmp_path):
+    """Session に enabled_ids を渡すと welcome の enabled フラグに反映される（#84/#85 前提）。"""
+    import itertools
+
+    counter = itertools.count(1)
+    session = Session(
+        seed=1, token_factory=lambda: f"tok{next(counter)}", enabled_ids={"reverse_off"}
+    )
+    web = tmp_path / "web"
+    web.mkdir()
+    (web / "index.html").write_text("<h1>local-UNO</h1>", encoding="utf-8")
+    cards = tmp_path / "static" / "cards"
+    cards.mkdir(parents=True)
+    client = TestClient(create_app(session=session, web_dir=web, cards_dir=cards))
+    with client.websocket_connect("/ws") as ws1:
+        rules = {r["id"]: r for r in ws1.receive_json()["rules"]}
+        assert rules["reverse_off"]["enabled"] is True
+        assert rules["standard"]["enabled"] is True  # required は常時
+        assert rules["uno_call"]["enabled"] is False  # 集合外は無効
+
+
 def test_ws_third_connection_rejected(tmp_path):
     client = make_client(tmp_path)
     with client.websocket_connect("/ws") as ws1:
