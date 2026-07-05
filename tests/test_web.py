@@ -167,21 +167,24 @@ def test_index_has_uno_button():
     assert 'id="uno-btn"' in INDEX
 
 
-def test_app_js_declare_uno_wired_and_gated_by_state():
-    """UNO! は state（手札枚数・宣言済み）から出し分け、declare_uno を送る（#70）。
+def test_app_js_declare_uno_wired_and_shown_during_play():
+    """UNO! は対局中いつでも押せ（誤宣言可）、declare_uno を送る（#70, #79, #80）。
 
-    declare_uno は awaiting に載らない常時受理アクションなので、awaiting ではなく
-    uno_declared / hand_counts を見て表示を制御する。gating と wiring を分離検証する。
+    house-rules §6 の誤宣言ペナルティ（手札1枚でない宣言＝本人が2枚ドロー, #79）を
+    UI から到達可能にするため、手札枚数によらず対局中は常時表示し、終局 (over) の
+    ときだけ隠す（指摘ボタン #76 と対称）。成否・ペナルティはサーバが判定（サーバ権威）。
     """
     # wiring: uno-btn の click ハンドラで declare_uno を送る
     assert re.search(r'getElementById\("uno-btn"\)\.addEventListener\(\s*"click"', APP_JS)
     assert re.search(r'type:\s*"declare_uno"', APP_JS)
-    # gating: awaiting ではなく state（uno_declared / hand_counts）で出し分ける
-    assert "uno_declared" in APP_JS
-    assert "hand_counts" in APP_JS
-    # gating 固有: uno-btn の hidden を toggleClass で出し分ける結線（wiring 行では
-    # 満たせないパターン。表示条件を消すと落ちる）
-    assert re.search(r'toggleClass\(\s*[^;]*?uno-btn[^;]*?"hidden"', APP_JS, re.S)
+    # gating: uno-btn の hidden は終局(over)のみで制御する
+    assert re.search(
+        r'toggleClass\(\s*[^;]*?uno-btn[^;]*?"hidden"[^;]*?over', APP_JS, re.S
+    )
+    # 手札枚数(myCount)や宣言済み(uno_declared)には紐付けない（誤宣言を許容＝
+    # 1枚のときだけの安全ゲートを廃止）
+    assert not re.search(r'toggleClass\(\s*[^;]*?uno-btn[^;]*?myCount', APP_JS, re.S)
+    assert not re.search(r'toggleClass\(\s*[^;]*?uno-btn[^;]*?declared', APP_JS, re.S)
 
 
 def test_index_has_challenge_button():
@@ -309,21 +312,25 @@ def test_ws_pass_after_voluntary_draw_advances_turn():
             assert passed["view"]["current_player"] == "p2"
 
 
-def test_ws_declare_uno_is_accepted_over_ws():
-    """declare_uno が WS 経由で受理される（error にならない）ことを固定（#70）。
+def test_ws_declare_uno_misfire_penalizes_declarer():
+    """初手7枚（=手札1枚でない）で declare_uno を送ると誤宣言になり、送信者が
+    2枚引く（#70, #79, #80）。
 
-    declare_uno は awaiting 非依存の常時受理アクション。初手7枚では宣言は成立
-    しない（no-op）が、WS パスを貫通して state が返り、uno_declared には載らない。
+    declare_uno は awaiting 非依存の常時受理アクション。初手7枚での宣言は誤宣言
+    （手札1枚でない）＝本人が2枚ドロー（7→9）。宣言は成立せず uno_declared にも
+    載らない。WS パス＋誤宣言ペナルティ配線を固定（#80 で UI から到達可能）。
     """
     client = deterministic_client()
     with client.websocket_connect("/ws") as ws1:
-        ws1.receive_json()
+        w1 = ws1.receive_json()
+        assert len(w1["view"]["your_hand"]) == 7
         with client.websocket_connect("/ws") as ws2:
             ws2.receive_json()
             ws1.send_text(json.dumps({"type": "declare_uno", "player": "p1"}))
             msg = ws1.receive_json()
             assert msg["type"] == "state"  # error でなく state（常時受理）
-            # 7枚では no-op: 宣言は成立せず uno_declared に載らない
+            # 誤宣言: 送信者 p1 にペナルティ2枚（7→9）、宣言は不成立
+            assert msg["view"]["hand_counts"]["p1"] == 9
             assert "p1" not in msg["view"]["uno_declared"]
 
 
