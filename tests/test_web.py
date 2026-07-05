@@ -247,6 +247,37 @@ def test_app_js_updates_panel_on_new_game_state():
     assert re.search(r'"state"[\s\S]{0,200}msg\.rules', APP_JS)
 
 
+def test_app_js_rules_panel_has_reorder_controls():
+    """順序編集: 上下移動ボタンと、after 依存を使った移動可否判定がある（#93）。"""
+    assert "moveRule" in APP_JS
+    assert re.search(r"canMoveUp", APP_JS) and re.search(r"canMoveDown", APP_JS)
+    # 依存（after）を参照して移動可否を判定する（違反移動の無効化）
+    assert re.search(r"\.after", APP_JS)
+    # required は移動不可
+    assert re.search(r"\.required", APP_JS)
+
+
+def test_app_js_reorder_gates_on_enabled_neighbor():
+    """移動可否は隣の enabled を見て判定する（無効な隣は依存の壁にしない, #93）。
+
+    無効ルールは送信されずサーバ order_violations の対象外なので、UI 側も無効な隣を
+    越える移動を許す（母集合＝送信対象＝有効ルールを一致させる）。
+    """
+    assert re.search(r"canMoveUp[\s\S]{0,160}\.enabled", APP_JS)
+    assert re.search(r"canMoveDown[\s\S]{0,160}\.enabled", APP_JS)
+    # チェック変更をメタに同期して再描画する（移動間もチェックを保持）
+    assert re.search(r'addEventListener\(\s*"change"[\s\S]{0,120}\.enabled\s*=', APP_JS)
+
+
+def test_app_js_new_game_sends_ids_in_display_order():
+    """new_game は現在の並び順（DOM 順）でチェック済み id を送る（#93）。
+
+    move で並べ替えた順が enabled_rule_ids に載る。querySelectorAll は DOM 順で走る。
+    """
+    assert re.search(r'querySelectorAll\("#rules-list[^"]*"\)', APP_JS)
+    assert re.search(r"enabled_rule_ids", APP_JS)
+
+
 def test_index_has_challenge_button():
     """「UNO言ってない!」指摘ボタンが UI にある（#71）。"""
     assert 'id="challenge-btn"' in INDEX

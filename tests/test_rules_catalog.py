@@ -186,6 +186,15 @@ def test_order_violations_ignores_absent_dependency():
     assert order_violations(["standard", "multi_play", "jump_in"]) == []
 
 
+def test_order_violations_ignores_disabled_dependency():
+    """無効化（並びに無い）依存先は制約を課さない（UI の壁判定と母集合を一致, #93）。
+
+    win_unrestricted を含めなければ、draw2_stack の win_unrestricted 依存は無関係で、
+    draw2_stack を standard の直後に置く並びも妥当（送信・検証されるのは有効ルールのみ）。
+    """
+    assert order_violations(["standard", "draw2_stack"]) == []
+
+
 def test_catalog_meta_order_reorders_enabled_first():
     """order を渡すと required 先頭・指定順、未掲載はカタログ順で末尾。"""
     meta = catalog_meta({"reverse_off", "multi_play"}, order=["multi_play", "reverse_off"])

@@ -107,17 +107,24 @@ function cardImg(card) {
   return img;
 }
 
-// ローカルルール設定パネルを描画（#84 確認 ＋ #85 設定）。welcome または new_game 後の
-// state で受けたメタ配列をカタログ順に並べ、各ルールを ON/OFF チェックボックスにする。
-// required（standard）は常時 ON・変更不可。チェック状態は「新規ゲーム」まではローカル。
-// 判定・構成適用はサーバ権威（原則1）。ここは表示と選択の送信のみ。
+// ローカルルール設定パネルを描画（#84 確認 ＋ #85 設定 ＋ #93 順序編集）。welcome または
+// new_game 後の state で受けたメタ配列を**現在の評価順**で並べ、各ルールを ON/OFF チェック
+// ボックス＋上下移動ボタンにする。required（standard）は常時 ON・移動不可・先頭固定。
+// 前後依存（after）を破る移動はボタンを無効化する（最終判定はサーバ権威, 原則1）。
+// チェック・並びは「新規ゲーム」まではローカル。ここは表示と選択の送信のみ。
 function renderRules(rules) {
   const list = document.getElementById("rules-list");
   if (!list) return;
+  const items = rules || [];
   list.replaceChildren();
-  (rules || []).forEach((r) => {
+  items.forEach((r, i) => {
     const li = document.createElement("li");
     li.className = "rule-item";
+    // 上下移動（依存を破る移動・required・端は無効化。判定はサーバでも再検証）
+    const move = document.createElement("span");
+    move.className = "rule-move";
+    move.appendChild(moveButton("▲", "上へ", canMoveUp(items, i), () => moveRule(i, -1)));
+    move.appendChild(moveButton("▼", "下へ", canMoveDown(items, i), () => moveRule(i, 1)));
     const label = document.createElement("label");
     label.className = "rule-label";
     const box = document.createElement("input");
@@ -126,23 +133,74 @@ function renderRules(rules) {
     box.dataset.ruleId = r.id;
     box.checked = Boolean(r.enabled);
     box.disabled = Boolean(r.required); // standard は外せない
+    // チェックはメタに同期し再描画（移動の間もチェックを保持し、可否判定の母集合＝
+    // 送信対象＝有効ルールを一致させる）。判定はサーバ権威、ここは選択の記録のみ。
+    box.addEventListener("change", () => {
+      r.enabled = box.checked;
+      renderRules(state.rules);
+    });
     const name = document.createElement("span");
     name.className = "rule-name";
     const sec = r.section ? r.section + " " : "";
     name.textContent = sec + r.name;
     label.appendChild(box);
     label.appendChild(name);
+    const head = document.createElement("div");
+    head.className = "rule-head";
+    head.appendChild(move);
+    head.appendChild(label);
     const desc = document.createElement("span");
     desc.className = "rule-desc";
     desc.textContent = r.description;
-    li.appendChild(label);
+    li.appendChild(head);
     li.appendChild(desc);
     list.appendChild(li);
   });
 }
 
-// チェック済みのルール id を集めて、その構成で新規ゲームを開始する（#85）。
-// required（disabled かつ checked）も含めて送るが、standard はサーバ側で常に有効。
+function moveButton(glyph, title, enabled, onClick) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "move-btn";
+  btn.textContent = glyph;
+  btn.title = title;
+  btn.disabled = !enabled;
+  if (enabled) btn.addEventListener("click", onClick);
+  return btn;
+}
+
+// i を上へ動かせるか。先頭/required は不可。**無効（未チェック）な隣は送信されず順序
+// 制約を課さない**ため壁にしない（サーバ order_violations と母集合を一致させる）。隣が
+// 有効で、かつ i の依存先（after）なら、上げると「依存先より前」になり違反するので不可。
+function canMoveUp(items, i) {
+  if (i <= 0 || items[i].required || items[i - 1].required) return false;
+  if (!items[i - 1].enabled) return true; // 無効な隣は越えても送信順に影響しない
+  return !(items[i].after || []).includes(items[i - 1].id);
+}
+
+// i を下へ動かせるか。末尾/required は不可。無効な隣は壁にしない。隣（i+1）が有効で i を
+// 依存先に持つ（after に i）なら、下げると i+1 が i より前になり違反するので不可。
+function canMoveDown(items, i) {
+  if (i >= items.length - 1 || items[i].required || items[i + 1].required) return false;
+  if (!items[i + 1].enabled) return true; // 無効な隣は越えても送信順に影響しない
+  return !(items[i + 1].after || []).includes(items[i].id);
+}
+
+// 表示中の順序（state.rules）で隣と入れ替え、再描画する（サーバ往復なしのローカル操作）。
+// state.rules を意図的に in-place で並べ替える（他に消費者は無く renderRules が同参照を
+// 読み直す。送信は DOM 走査で現在の並び順を拾う）。
+function moveRule(i, delta) {
+  const items = state.rules;
+  const j = i + delta;
+  if (!items || j < 0 || j >= items.length) return;
+  const tmp = items[i];
+  items[i] = items[j];
+  items[j] = tmp;
+  renderRules(items);
+}
+
+// チェック済みのルール id を**現在の並び順**で集め、その構成で新規ゲームを開始する（#85/#93）。
+// required（disabled かつ checked）も含めて送るが、standard はサーバ側で常に先頭・有効。
 function startNewGame() {
   const ids = [];
   document.querySelectorAll("#rules-list .rule-check").forEach((box) => {

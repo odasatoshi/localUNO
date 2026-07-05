@@ -110,7 +110,11 @@ body[data-turn="you"] .status::before { background: var(--on-accent); animation:
 .rule-item { display: flex; flex-direction: column; gap: 2px; padding: var(--s2) 0; border-top: 1px solid var(--line); }
 .rule-label { display: flex; align-items: center; gap: 8px; font-family: var(--font-ui); font-weight: 700; cursor: pointer; }
 .rule-check { width: 18px; height: 18px; accent-color: var(--grape); flex: 0 0 auto; }
-.rule-desc { color: var(--ink-2); font-size: .82rem; padding-left: 26px; }
+.rule-head { display: flex; align-items: center; gap: 8px; }
+.rule-move { display: inline-flex; flex-direction: column; gap: 2px; flex: 0 0 auto; }
+.move-btn { font-family: var(--font-ui); line-height: 1; padding: 1px 6px; font-size: .7rem; border: 1px solid var(--line); border-radius: 6px; background: var(--raise); color: var(--ink); cursor: pointer; }
+.move-btn:disabled { opacity: .3; cursor: not-allowed; }
+.rule-desc { color: var(--ink-2); font-size: .82rem; padding-left: 52px; }
 
 /* 相手ゾーン */
 .opp { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) var(--s3); background: var(--sunk); border: 1px solid var(--line); border-radius: var(--radius); }
