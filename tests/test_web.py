@@ -88,10 +88,16 @@ def test_your_turn_highlights_own_zone():
     # フロントは手番を body の data-turn に反映している（"you" を出す）
     assert "dataset.turn" in APP_JS
     assert '"you"' in APP_JS
-    # CSS 側: 自分の番のとき自分ゾーンを強調するセレクタが存在する
+    # CSS 側: 自分の番のとき自分ゾーンを強調するセレクタと明滅アニメが結線されている
     assert 'body[data-turn="you"] .you' in STYLE_CSS
-    # reduced-motion では明滅アニメを止める配慮がある
-    assert "prefers-reduced-motion" in STYLE_CSS
+    assert "@keyframes your-turn" in STYLE_CSS
+    assert "animation: your-turn" in STYLE_CSS
+    # レイアウトを動かさないための透明枠を常時確保している（本 issue の肝）
+    assert "border: 2px solid transparent" in STYLE_CSS
+    # reduced-motion ブロック内で手番グローの明滅を止めている（新規 .you 向けの配慮を直接担保）
+    rm_block = STYLE_CSS[STYLE_CSS.index("prefers-reduced-motion") :]
+    assert 'body[data-turn="you"] .you' in rm_block
+    assert "animation: none" in rm_block
 
 
 def test_app_js_sends_actions_as_json():

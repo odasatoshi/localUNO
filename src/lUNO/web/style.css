@@ -159,6 +159,7 @@ body[data-turn="you"] .status::before { background: var(--on-accent); animation:
   display: flex; flex-direction: column; gap: var(--s2);
   padding: var(--s2) var(--s3);
   border: 2px solid transparent; border-radius: var(--radius);
+  box-shadow: 0 0 0 0 transparent; /* 手番解除時に box-shadow を素直にフェードで戻す基底値 */
   transition: border-color var(--ease-out) .2s, background var(--ease-out) .2s, box-shadow var(--ease-out) .2s;
 }
 body[data-turn="you"] .you {
