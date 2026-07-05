@@ -133,6 +133,12 @@ function renderRules(rules) {
     box.dataset.ruleId = r.id;
     box.checked = Boolean(r.enabled);
     box.disabled = Boolean(r.required); // standard は外せない
+    // チェックはメタに同期し再描画（移動の間もチェックを保持し、可否判定の母集合＝
+    // 送信対象＝有効ルールを一致させる）。判定はサーバ権威、ここは選択の記録のみ。
+    box.addEventListener("change", () => {
+      r.enabled = box.checked;
+      renderRules(state.rules);
+    });
     const name = document.createElement("span");
     name.className = "rule-name";
     const sec = r.section ? r.section + " " : "";
@@ -163,21 +169,26 @@ function moveButton(glyph, title, enabled, onClick) {
   return btn;
 }
 
-// i を上へ動かせるか。先頭/required 同士は不可。隣（i-1）が i の依存先（after）なら、
-// 上げると「依存先より前」になり違反するので不可。
+// i を上へ動かせるか。先頭/required は不可。**無効（未チェック）な隣は送信されず順序
+// 制約を課さない**ため壁にしない（サーバ order_violations と母集合を一致させる）。隣が
+// 有効で、かつ i の依存先（after）なら、上げると「依存先より前」になり違反するので不可。
 function canMoveUp(items, i) {
   if (i <= 0 || items[i].required || items[i - 1].required) return false;
+  if (!items[i - 1].enabled) return true; // 無効な隣は越えても送信順に影響しない
   return !(items[i].after || []).includes(items[i - 1].id);
 }
 
-// i を下へ動かせるか。末尾/required は不可。隣（i+1）が i を依存先に持つ（after に i）なら、
-// 下げると i+1 が i より前になり違反するので不可。
+// i を下へ動かせるか。末尾/required は不可。無効な隣は壁にしない。隣（i+1）が有効で i を
+// 依存先に持つ（after に i）なら、下げると i+1 が i より前になり違反するので不可。
 function canMoveDown(items, i) {
   if (i >= items.length - 1 || items[i].required || items[i + 1].required) return false;
+  if (!items[i + 1].enabled) return true; // 無効な隣は越えても送信順に影響しない
   return !(items[i + 1].after || []).includes(items[i].id);
 }
 
 // 表示中の順序（state.rules）で隣と入れ替え、再描画する（サーバ往復なしのローカル操作）。
+// state.rules を意図的に in-place で並べ替える（他に消費者は無く renderRules が同参照を
+// 読み直す。送信は DOM 走査で現在の並び順を拾う）。
 function moveRule(i, delta) {
   const items = state.rules;
   const j = i + delta;
