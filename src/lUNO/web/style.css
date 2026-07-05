@@ -153,7 +153,24 @@ body[data-turn="you"] .status::before { background: var(--on-accent); animation:
 .card-slot .card { width: 96px; }
 
 /* 自分ゾーン */
-.you { display: flex; flex-direction: column; gap: var(--s2); }
+/* 枠は常時（透明で）確保し、手番切替でレイアウトが動かないようにする。
+   自分の番のときだけ枠に色＋淡いグローを乗せ、手札エリアごと強調する。 */
+.you {
+  display: flex; flex-direction: column; gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border: 2px solid transparent; border-radius: var(--radius);
+  transition: border-color var(--ease-out) .2s, background var(--ease-out) .2s, box-shadow var(--ease-out) .2s;
+}
+body[data-turn="you"] .you {
+  border-color: var(--grape);
+  background: color-mix(in oklch, var(--grape), transparent 93%);
+  animation: your-turn 2.6s ease-in-out infinite;
+}
+/* 落ち着いた「呼吸」グロー（強すぎない範囲でゆっくり明滅） */
+@keyframes your-turn {
+  0%, 100% { box-shadow: 0 0 0 4px color-mix(in oklch, var(--grape), transparent 84%), 0 0 16px color-mix(in oklch, var(--grape), transparent 82%); }
+  50%      { box-shadow: 0 0 0 5px color-mix(in oklch, var(--grape), transparent 74%), 0 0 26px color-mix(in oklch, var(--grape), transparent 68%); }
+}
 .you-head { display: flex; align-items: center; gap: 8px; }
 .you-head .who { font-size: .9rem; }
 .hand { display: flex; align-items: flex-end; overflow-x: auto; overflow-y: hidden; padding: 30px 4px 8px; scroll-padding-inline: 24px; }
@@ -286,4 +303,6 @@ body[data-turn="you"] .status::before { background: var(--on-accent); animation:
   /* カットインはスライドを止め静止表示にする（アニメ末尾が opacity:0 のため、
      アニメを切って可視のままにし、JS のタイマー（約1.2秒）で隠す）。 */
   .cutin:not(.hidden) .cutin-card { animation: none; opacity: 1; }
+  /* 手番グローは明滅を止め、枠＋静的グローだけ残す（手番の可視性は保つ）。 */
+  body[data-turn="you"] .you { animation: none; box-shadow: 0 0 0 4px color-mix(in oklch, var(--grape), transparent 80%); }
 }

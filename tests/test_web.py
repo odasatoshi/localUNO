@@ -19,6 +19,7 @@ from lUNO.server.session import Session
 
 APP_JS = (WEB_DIR / "app.js").read_text(encoding="utf-8")
 INDEX = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+STYLE_CSS = (WEB_DIR / "style.css").read_text(encoding="utf-8")
 
 
 @pytest.fixture
@@ -79,6 +80,18 @@ def test_app_js_renders_playerview_and_uses_card_images():
     assert "/cards/" in APP_JS  # カード画像は static PNG を参照（§7）
     assert "image_key" in APP_JS
     assert "your_hand" in APP_JS
+
+
+def test_your_turn_highlights_own_zone():
+    """自分の番（body[data-turn="you"]）のとき自分ゾーン .you を枠強調する（#101）。
+    判定は app.js が body.dataset.turn にセット済みで、強調は CSS のみで行う。"""
+    # フロントは手番を body の data-turn に反映している（"you" を出す）
+    assert "dataset.turn" in APP_JS
+    assert '"you"' in APP_JS
+    # CSS 側: 自分の番のとき自分ゾーンを強調するセレクタが存在する
+    assert 'body[data-turn="you"] .you' in STYLE_CSS
+    # reduced-motion では明滅アニメを止める配慮がある
+    assert "prefers-reduced-motion" in STYLE_CSS
 
 
 def test_app_js_sends_actions_as_json():
