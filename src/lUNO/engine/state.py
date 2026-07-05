@@ -51,6 +51,29 @@ def _card_to_dict(inst: CardInstance) -> dict:
 
 
 @dataclass(frozen=True)
+class GameEvent:
+    """直近アクションの一時イベント（カットイン演出用, #97 / docs/design.md）。
+
+    永続ゲーム状態ではなく「今のアクションで何が起きたか」を1件だけ運ぶ。engine が各
+    アクション開始でクリアし、rules/engine が設定、次アクションで消える。PlayerView に
+    公開され（誰が宣言/指摘/強制ドローしたかは全員に見える情報）、フロントが演出に使う。
+
+    ``kind``: ``"uno"``（正当宣言）/ ``"uno_misfire"``（誤宣言→本人ペナルティ）/
+    ``"challenge_success"``（指摘成功→相手ペナルティ）/ ``"challenge_misfire"``（お手つき
+    →本人ペナルティ）/ ``"forced_draw"``（Draw2/Draw4 の強制ドロー）。
+    ``by``: 行為者 / ``target``: 影響を受けた側 / ``amount``: ドロー枚数（あれば）。
+    """
+
+    kind: str
+    by: str | None = None
+    target: str | None = None
+    amount: int = 0
+
+    def to_dict(self) -> dict:
+        return {"kind": self.kind, "by": self.by, "target": self.target, "amount": self.amount}
+
+
+@dataclass(frozen=True)
 class GameState:
     """サーバが持つ権威状態の全体（spec §3.1）。
 
@@ -85,6 +108,9 @@ class GameState:
     # ドロー後プレイ（house-rules §7）の一時マーカー。自主ドロー直後、この ID のカードを
     # 先頭にした出しだけを許す（None=通常時）。play/pass 後にルールが None へ戻す。
     drawn_card_id: int | None = None
+    # 直近アクションの一時イベント（カットイン演出用, #97）。engine が各アクション開始で
+    # クリアし、rules/engine が設定する。永続状態ではなく次アクションで消える。
+    last_event: GameEvent | None = None
 
     def __post_init__(self) -> None:
         # frozen をすり抜ける可変 dict を読み取り専用ビューへ（§3.2 の所有権を担保）
@@ -140,6 +166,10 @@ class GameState:
     def with_drawn_card_id(self, card_id: int | None) -> GameState:
         """ドロー後プレイの一時マーカーを差し替える（house-rules §7）。"""
         return self.replace(drawn_card_id=card_id)
+
+    def with_last_event(self, event: GameEvent | None) -> GameState:
+        """直近アクションの一時イベントを差し替える（カットイン演出用, #97）。"""
+        return self.replace(last_event=event)
 
     def with_awaiting(self, awaiting: Mapping[str, Iterable[str]]) -> GameState:
         """受理可能アクションのマップを差し替える（値はタプル化して不変化）。"""
@@ -217,6 +247,7 @@ class PlayerView:
     is_draw: bool
     uno_declared: frozenset[str]
     drawn_card_id: int | None
+    last_event: GameEvent | None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "hand_counts", _readonly(self.hand_counts))
@@ -240,6 +271,7 @@ class PlayerView:
             "is_draw": self.is_draw,
             "uno_declared": sorted(self.uno_declared),
             "drawn_card_id": self.drawn_card_id,
+            "last_event": self.last_event.to_dict() if self.last_event is not None else None,
         }
 
 
@@ -269,11 +301,13 @@ def player_view(state: GameState, player_id: str) -> PlayerView:
         is_draw=state.is_draw,
         uno_declared=state.uno_declared,
         drawn_card_id=state.drawn_card_id,
+        last_event=state.last_event,
     )
 
 
 __all__ = [
     "GameState",
+    "GameEvent",
     "PlayerView",
     "player_view",
 ]

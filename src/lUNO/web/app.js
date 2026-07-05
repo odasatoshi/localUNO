@@ -82,6 +82,9 @@ function handleMessage(msg) {
       renderRules(msg.rules);
     }
     render(msg.view);
+    // 直近アクションの出来事（UNO!/指摘/強制ドロー）をカットインで見せる（#97）。
+    // welcome（再接続）では出さない＝古い出来事の再演を避ける。
+    if (msg.view && msg.view.last_event) showCutIn(msg.view.last_event, state.me);
   } else if (msg.type === "error") {
     setStatus("エラー: " + msg.message);
     // 満席（3人目以降）はサーバが close する。無限リトライを止める。
@@ -348,6 +351,47 @@ function updatePlayButton() {
 function playSelected() {
   if (state.selected.length === 0) return;
   send({ type: "play", player: state.me, card_ids: state.selected.slice() });
+}
+
+// --- カットイン演出（直近アクションの出来事を一瞬大きく見せる, #97） ---------
+
+// last_event（サーバが載せる出来事）を、見る人（me）視点の文言に変換する。
+// tone は色味: cheer=宣言 / good=自分に有利 / bad=自分が損 / neutral。
+function cutinContent(ev, me) {
+  const who = (p) => (p === me ? "あなた" : "あいて");
+  const onMe = (p) => p === me;
+  switch (ev.kind) {
+    case "uno":
+      return { title: "UNO!", sub: who(ev.by) + "が宣言", tone: "cheer" };
+    case "uno_misfire":
+      return { title: "誤宣言…", sub: who(ev.target) + " +" + ev.amount + "枚", tone: onMe(ev.target) ? "bad" : "good" };
+    case "challenge_success":
+      return { title: "UNO言ってない!", sub: "指摘成功！ " + who(ev.target) + " +" + ev.amount + "枚", tone: onMe(ev.target) ? "bad" : "good" };
+    case "challenge_misfire":
+      return { title: "UNO言ってない!", sub: "お手つき… " + who(ev.target) + " +" + ev.amount + "枚", tone: onMe(ev.target) ? "bad" : "good" };
+    case "forced_draw":
+      return { title: "+" + ev.amount, sub: who(ev.target) + "がドロー", tone: onMe(ev.target) ? "bad" : "neutral" };
+    default:
+      return null;
+  }
+}
+
+let cutinTimer = null;
+function showCutIn(ev, me) {
+  const el = document.getElementById("cutin");
+  if (!el || !ev) return;
+  const c = cutinContent(ev, me);
+  if (!c) return;
+  // 文言は固定文＋数値＋あなた/あいて のみ（外部入力なし）。
+  el.innerHTML =
+    '<div class="cutin-card"><div class="cutin-title"></div><div class="cutin-sub"></div></div>';
+  el.querySelector(".cutin-title").textContent = c.title;
+  el.querySelector(".cutin-sub").textContent = c.sub;
+  el.className = "cutin hidden tone-" + c.tone;
+  void el.offsetWidth; // reflow でアニメーションを毎回リスタート
+  el.classList.remove("hidden");
+  clearTimeout(cutinTimer);
+  cutinTimer = setTimeout(() => el.classList.add("hidden"), 1200);
 }
 
 // --- テーマ（ライト/ダーク） -----------------------------------------------

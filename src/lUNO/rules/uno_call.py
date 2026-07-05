@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from ..engine.engine import ON_CHALLENGE_UNO, ON_DECLARE_UNO, draw_cards
 from ..engine.hooks import ON_AFTER_PLAY, ON_DRAW, Ctx, Rule
-from ..engine.state import GameState
+from ..engine.state import GameEvent, GameState
 
 _PENALTY = 2
 
@@ -45,11 +45,16 @@ def declare_uno(state: GameState, ctx: Ctx) -> GameState:
         return state  # 終局後の宣言は無効
     player = ctx.action.player
     if len(state.hands.get(player, ())) == 1:
-        return state.with_uno_declared(state.uno_declared | {player})
+        return state.with_uno_declared(state.uno_declared | {player}).with_last_event(
+            GameEvent("uno", by=player)
+        )
     # 手札が1枚でない誤宣言は本人が2枚ドロー（指摘誤爆と対称）。ドロー後の
     # フラグ整理は challenge_uno と対称に置く（本経路では実質 no-op だが防御的）。
     state = draw_cards(state, player, _PENALTY)
-    return _refresh_declared(state)
+    state = _refresh_declared(state)
+    return state.with_last_event(
+        GameEvent("uno_misfire", by=player, target=player, amount=_PENALTY)
+    )
 
 
 def challenge_uno(state: GameState, ctx: Ctx) -> GameState:
@@ -62,7 +67,11 @@ def challenge_uno(state: GameState, ctx: Ctx) -> GameState:
     caught = len(state.hands.get(target, ())) == 1 and target not in state.uno_declared
     penalized = target if caught else challenger
     state = draw_cards(state, penalized, _PENALTY)
-    return _refresh_declared(state)
+    state = _refresh_declared(state)
+    kind = "challenge_success" if caught else "challenge_misfire"
+    return state.with_last_event(
+        GameEvent(kind, by=challenger, target=penalized, amount=_PENALTY)
+    )
 
 
 def refresh_after_change(state: GameState, ctx: Ctx) -> GameState:
