@@ -52,7 +52,7 @@ def _card_to_dict(inst: CardInstance) -> dict:
 
 @dataclass(frozen=True)
 class GameEvent:
-    """直近アクションの一時イベント（カットイン演出用, house-rules §6 / #97）。
+    """直近アクションの一時イベント（カットイン演出用, #97 / docs/design.md）。
 
     永続ゲーム状態ではなく「今のアクションで何が起きたか」を1件だけ運ぶ。engine が各
     アクション開始でクリアし、rules/engine が設定、次アクションで消える。PlayerView に
