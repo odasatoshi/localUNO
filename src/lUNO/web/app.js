@@ -291,6 +291,7 @@ function render(view) {
     toggleClass(banner, "hidden", false);
     setStatus("終局");
   } else {
+    bannerMsg.textContent = ""; // 再戦後に前回終局の文言を残さない（非表示だが掃除）
     toggleClass(banner, "hidden", true);
     setStatus(view.current_player === me ? "あなたの番" : "相手の番");
   }
