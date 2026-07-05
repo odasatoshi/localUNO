@@ -2,43 +2,46 @@
 <html lang="ja">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>local-UNO</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
-    <header>
-      <h1>local-UNO</h1>
-      <div id="status" class="status">接続中…</div>
-    </header>
+    <!-- ゲーム盤（3ゾーン: 相手 / 場 / 自分＋操作）。PC/スマホは style.css の
+         メディアクエリで出し分け。要素ID・アクション送信は app.js の契約どおり保持。 -->
+    <main class="board">
+      <header class="topbar">
+        <span class="brand">local-<b>UNO</b></span>
+        <span id="status" class="status">接続中…</span>
+        <button id="theme-btn" class="ghost-btn" type="button" aria-label="ライト/ダーク切替">🌙</button>
+        <button id="reset-btn" class="ghost-btn" type="button">⟲ リセット</button>
+      </header>
 
-    <main>
-      <!-- ローカルルール（確認 #84 ＋ 新規ゲーム時の ON/OFF 設定 #85） -->
-      <section id="rules" class="zone rules-zone">
-        <details open>
-          <summary>ローカルルール設定</summary>
-          <ul id="rules-list" class="rules-list"></ul>
-          <div class="controls">
-            <button id="new-game-btn">この設定で新規ゲーム</button>
-          </div>
-        </details>
-      </section>
+      <!-- ローカルルール（確認 #84 ＋ 新規ゲーム時の ON/OFF 設定 #85）。設定なので
+           既定は折りたたみ、summary から開く。中身の描画は app.js（renderRules）。 -->
+      <details id="rules" class="rules-zone">
+        <summary>ローカルルール設定</summary>
+        <ul id="rules-list" class="rules-list"></ul>
+        <div class="controls">
+          <button id="new-game-btn" type="button">この設定で新規ゲーム</button>
+        </div>
+      </details>
 
       <!-- 相手（枚数のみ公開） -->
-      <section id="opponent" class="zone">
-        <h2>相手</h2>
-        <div id="opponent-count" class="count"></div>
+      <section id="opponent" class="zone opp">
+        <span class="who"><span class="ava">P2</span>あいて</span>
+        <span id="opponent-count" class="count"></span>
       </section>
 
-      <!-- 場（捨て山トップ・山札残・強制色） -->
-      <section id="table" class="zone">
+      <!-- 場（山札残・捨て山トップ・強制色） -->
+      <section id="table" class="zone table">
         <div class="pile">
-          <div class="label">捨て山</div>
-          <div id="discard-top" class="card-slot"></div>
-        </div>
-        <div class="pile">
-          <div class="label">山札</div>
+          <div class="label">やま</div>
           <div id="draw-count" class="count"></div>
+        </div>
+        <div class="pile pile-main">
+          <div class="label">すて札</div>
+          <div id="discard-top" class="card-slot"></div>
         </div>
         <div class="pile">
           <div class="label">強制色</div>
@@ -46,29 +49,37 @@
         </div>
       </section>
 
-      <!-- 色選択（ワイルド時のみ表示） -->
-      <section id="color-picker" class="color-picker hidden">
-        <div class="label">色を選択</div>
-        <button class="color-btn" data-color="red">赤</button>
-        <button class="color-btn" data-color="yellow">黄</button>
-        <button class="color-btn" data-color="green">緑</button>
-        <button class="color-btn" data-color="blue">青</button>
-      </section>
-
-      <!-- 自分の手札 -->
-      <section id="you" class="zone">
-        <h2>あなた（<span id="me"></span>）</h2>
+      <!-- 自分の手札＋操作（下部＝スマホの親指ゾーン） -->
+      <section id="you" class="zone you">
+        <div class="you-head"><span class="who"><span class="ava">P1</span>あなた（<span id="me"></span>）</span></div>
         <div id="hand" class="hand"></div>
-        <div class="controls">
-          <button id="play-btn">出す</button>
-          <button id="draw-btn">引く</button>
-          <button id="pass-btn">パス</button>
-          <button id="uno-btn" class="uno-btn hidden">UNO!</button>
-          <button id="challenge-btn" class="challenge-btn hidden">UNO言ってない!</button>
-          <button id="reset-btn">リセット（再戦）</button>
+        <div class="controls actions">
+          <div class="calls">
+            <button id="uno-btn" class="uno-btn hidden" type="button">UNO!</button>
+            <button id="challenge-btn" class="challenge-btn hidden" type="button">UNO言ってない!</button>
+          </div>
+          <div class="primary">
+            <button id="draw-btn" type="button">引く</button>
+            <button id="play-btn" type="button">出す</button>
+            <button id="pass-btn" type="button">パス</button>
+          </div>
         </div>
       </section>
 
+      <!-- 色選択（ワイルド時のみ表示。app.js が hidden をトグル）: 盤面上のシート -->
+      <section id="color-picker" class="color-picker hidden">
+        <div class="sheet">
+          <div class="label">色をえらぶ</div>
+          <div class="colors">
+            <button class="color-btn" data-color="red" type="button">赤</button>
+            <button class="color-btn" data-color="yellow" type="button">黄</button>
+            <button class="color-btn" data-color="green" type="button">緑</button>
+            <button class="color-btn" data-color="blue" type="button">青</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 勝敗・引き分けバナー（app.js が hidden をトグル） -->
       <div id="banner" class="banner hidden"></div>
     </main>
 

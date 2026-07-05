@@ -214,6 +214,9 @@ function render(view) {
   // ペナルティはサーバが判定（サーバ権威）。UI は終局時のみ隠す。
   toggleClass(document.getElementById("challenge-btn"), "hidden", over);
 
+  // 手番をひと目で分かるよう body に印を付ける（style.css が強調表示に使う）。
+  document.body.dataset.turn = over ? "over" : view.current_player === me ? "you" : "other";
+
   // 手番・勝敗の表示
   const banner = document.getElementById("banner");
   if (view.winner) {
@@ -289,6 +292,23 @@ function playSelected() {
   send({ type: "play", player: state.me, card_ids: state.selected.slice() });
 }
 
+// --- テーマ（ライト/ダーク） -----------------------------------------------
+
+// 既定は OS 設定に追従（CSS の prefers-color-scheme）。ボタンで data-theme を
+// 上書きし localStorage に保存する。ゲーム状態には無関係な純粋な表示設定。
+const THEME_KEY = "luno_theme";
+function applyTheme(pref) {
+  const root = document.documentElement;
+  if (pref === "light" || pref === "dark") root.setAttribute("data-theme", pref);
+  else root.removeAttribute("data-theme");
+  const btn = document.getElementById("theme-btn");
+  if (btn) {
+    const dark = root.getAttribute("data-theme") === "dark"
+      || (!root.hasAttribute("data-theme") && matchMedia("(prefers-color-scheme: dark)").matches);
+    btn.textContent = dark ? "☀️" : "🌙";
+  }
+}
+
 // --- 入力ハンドラ（送信のみ） ---------------------------------------------
 
 function wireControls() {
@@ -309,6 +329,17 @@ function wireControls() {
     send({ type: "reset", player: state.me });
   });
   document.getElementById("new-game-btn").addEventListener("click", startNewGame);
+  const themeBtn = document.getElementById("theme-btn");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
+      const root = document.documentElement;
+      const cur = root.getAttribute("data-theme");
+      const dark = cur ? cur === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+      const next = dark ? "light" : "dark";
+      localStorage.setItem(THEME_KEY, next);
+      applyTheme(next);
+    });
+  }
   document.querySelectorAll(".color-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       send({ type: "choose_color", player: state.me, color: btn.dataset.color });
@@ -328,6 +359,7 @@ function toggleClass(el, cls, on) {
 }
 
 window.addEventListener("DOMContentLoaded", () => {
+  applyTheme(localStorage.getItem(THEME_KEY));
   wireControls();
   connect();
 });
