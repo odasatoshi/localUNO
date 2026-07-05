@@ -82,9 +82,10 @@ def coerce_card_ids(value: object) -> tuple[int, ...]:
 def coerce_rule_ids(value: object) -> tuple[str, ...]:
     """新規ゲームの有効ルール id 列を検証してタプル化する（#85）。
 
-    非空文字列の列（list/tuple）。順序を保って重複を除く。空リストは許容する
-    （＝ハウスルール無し・標準のみの対戦。standard は必須で常に有効）。カタログに実在
-    するかの意味検証はサーバ層（Session）の責務（engine は rules を import しない）。
+    非空文字列の列（list/tuple）。順序を保って重複を除く（この順序は入力の正規化用で、
+    フック合成順は下流の RULE_CATALOG 順が権威）。空リストは許容する（＝ハウスルール無し・
+    標準のみの対戦。standard は必須で常に有効）。カタログに実在するかの意味検証はサーバ層
+    （Session）の責務（engine は rules を import しない）。
     """
     if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)):
         raise ActionError("enabled_rule_ids は文字列のリストであること")
