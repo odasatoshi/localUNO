@@ -75,6 +75,12 @@ function handleMessage(msg) {
     }
     render(msg.view);
   } else if (msg.type === "state") {
+    // new_game 後の state はルールメタを同梱する。届いたときだけ設定パネルを更新
+    // （通常の手番更新では送られないので、途中のチェック操作を消さない, #85）。
+    if (msg.rules) {
+      state.rules = msg.rules;
+      renderRules(msg.rules);
+    }
     render(msg.view);
   } else if (msg.type === "error") {
     setStatus("エラー: " + msg.message);
@@ -101,8 +107,10 @@ function cardImg(card) {
   return img;
 }
 
-// 有効ローカルルールの確認パネルを描画（read-only, #84）。welcome で受けたメタ配列を
-// カタログ順に並べ、有効／無効を記号と淡色で示す。判定はサーバ権威、ここは表示のみ。
+// ローカルルール設定パネルを描画（#84 確認 ＋ #85 設定）。welcome または new_game 後の
+// state で受けたメタ配列をカタログ順に並べ、各ルールを ON/OFF チェックボックスにする。
+// required（standard）は常時 ON・変更不可。チェック状態は「新規ゲーム」まではローカル。
+// 判定・構成適用はサーバ権威（原則1）。ここは表示と選択の送信のみ。
 function renderRules(rules) {
   const list = document.getElementById("rules-list");
   if (!list) return;
@@ -110,18 +118,37 @@ function renderRules(rules) {
   (rules || []).forEach((r) => {
     const li = document.createElement("li");
     li.className = "rule-item";
-    toggleClass(li, "rule-off", !r.enabled);
+    const label = document.createElement("label");
+    label.className = "rule-label";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.className = "rule-check";
+    box.dataset.ruleId = r.id;
+    box.checked = Boolean(r.enabled);
+    box.disabled = Boolean(r.required); // standard は外せない
     const name = document.createElement("span");
     name.className = "rule-name";
     const sec = r.section ? r.section + " " : "";
-    name.textContent = (r.enabled ? "✓ " : "× ") + sec + r.name;
+    name.textContent = sec + r.name;
+    label.appendChild(box);
+    label.appendChild(name);
     const desc = document.createElement("span");
     desc.className = "rule-desc";
     desc.textContent = r.description;
-    li.appendChild(name);
+    li.appendChild(label);
     li.appendChild(desc);
     list.appendChild(li);
   });
+}
+
+// チェック済みのルール id を集めて、その構成で新規ゲームを開始する（#85）。
+// required（disabled かつ checked）も含めて送るが、standard はサーバ側で常に有効。
+function startNewGame() {
+  const ids = [];
+  document.querySelectorAll("#rules-list .rule-check").forEach((box) => {
+    if (box.checked) ids.push(box.dataset.ruleId);
+  });
+  send({ type: "new_game", player: state.me, enabled_rule_ids: ids });
 }
 
 function render(view) {
@@ -281,6 +308,7 @@ function wireControls() {
   document.getElementById("reset-btn").addEventListener("click", () => {
     send({ type: "reset", player: state.me });
   });
+  document.getElementById("new-game-btn").addEventListener("click", startNewGame);
   document.querySelectorAll(".color-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       send({ type: "choose_color", player: state.me, color: btn.dataset.color });

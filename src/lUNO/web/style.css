@@ -236,6 +236,23 @@ button:disabled {
   background: var(--bg);
 }
 
+.rule-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.rule-check {
+  width: 1.1rem;
+  height: 1.1rem;
+  cursor: pointer;
+}
+
+.rule-check:disabled {
+  cursor: not-allowed;
+}
+
 .rule-name {
   font-size: 0.9rem;
   color: var(--text);
@@ -244,11 +261,7 @@ button:disabled {
 .rule-desc {
   font-size: 0.78rem;
   color: var(--muted);
-}
-
-/* 無効ルールは淡色で「効いていない」ことを示す */
-.rule-item.rule-off {
-  opacity: 0.45;
+  margin-left: 1.6rem;
 }
 
 .hidden {

@@ -14,7 +14,9 @@
   （``rules`` は有効ローカルルールのメタ配列, #84）／``{"type":"state","view":{...}}`` 状態
   更新時／``{"type":"error","message":...}``。
 - client→server: Action の JSON（``{"type":"play","player":"p1","card_ids":[N]}`` 等。
-  複数枚出し対応で ``card_ids`` はリスト, #35）。再接続は ``/ws?token=<token>``。
+  複数枚出し対応で ``card_ids`` はリスト, #35）。ローカルルール設定は
+  ``{"type":"new_game","player":"p1","enabled_rule_ids":[...]}``（構成を差し替えて新規
+  ゲーム, #85。直後の state ブロードキャストは ``rules`` を同梱）。再接続は ``/ws?token=<token>``。
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
-from ..engine.actions import ActionError
+from ..engine.actions import ActionError, NewGameAction, parse
 from ..engine.engine import EngineError
 from .session import Session, SessionError, SessionFull
 
@@ -34,11 +36,19 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 CARDS_DIR = Path(__file__).resolve().parent.parent / "static" / "cards"
 
 
-async def _broadcast(session: Session) -> None:
-    """現行接続の各クライアントへ、その視界の PlayerView をフル送信する（§6）。"""
+async def _broadcast(session: Session, include_rules: bool = False) -> None:
+    """現行接続の各クライアントへ、その視界の PlayerView をフル送信する（§6）。
+
+    ``include_rules`` が True のときは有効ルールのメタも同梱する。ルール構成が変わる
+    new_game の後だけ True にし、通常の手番更新では送らない（フロントの設定パネルの
+    途中操作を毎手番でリセットしないため, #85）。
+    """
     for conn, view in session.broadcast_targets():
+        msg: dict = {"type": "state", "view": view.to_dict()}
+        if include_rules:
+            msg["rules"] = session.rules_meta()
         try:
-            await conn.send_json({"type": "state", "view": view.to_dict()})
+            await conn.send_json(msg)
         except Exception:  # noqa: BLE001 送信失敗（切断途中など）は握りつぶす
             pass
 
@@ -95,11 +105,13 @@ def create_app(
             while True:
                 raw = await websocket.receive_text()
                 try:
-                    session.apply(result.token, raw)
+                    act = parse(raw)
+                    session.apply(result.token, act)
                 except (SessionError, ActionError, EngineError) as exc:
                     await websocket.send_json({"type": "error", "message": str(exc)})
                     continue
-                await _broadcast(session)
+                # ルール構成が変わる new_game のときだけ更新後のメタを同梱する（#85）。
+                await _broadcast(session, include_rules=act.type == NewGameAction.type)
         except WebSocketDisconnect:
             pass
         except Exception:  # noqa: BLE001 想定外でもスロット解放のため握る（可視化は将来 logging）

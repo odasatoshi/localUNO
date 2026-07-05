@@ -79,6 +79,27 @@ def coerce_card_ids(value: object) -> tuple[int, ...]:
     return ids
 
 
+def coerce_rule_ids(value: object) -> tuple[str, ...]:
+    """新規ゲームの有効ルール id 列を検証してタプル化する（#85）。
+
+    非空文字列の列（list/tuple）。順序を保って重複を除く（この順序は入力の正規化用で、
+    フック合成順は下流の RULE_CATALOG 順が権威）。空リストは許容する（＝ハウスルール無し・
+    標準のみの対戦。standard は必須で常に有効）。カタログに実在するかの意味検証はサーバ層
+    （Session）の責務（engine は rules を import しない）。
+    """
+    if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)):
+        raise ActionError("enabled_rule_ids は文字列のリストであること")
+    seen: set[str] = set()
+    ids: list[str] = []
+    for v in value:
+        if not isinstance(v, str) or not v:
+            raise ActionError("enabled_rule_ids の要素は非空文字列であること")
+        if v not in seen:
+            seen.add(v)
+            ids.append(v)
+    return tuple(ids)
+
+
 def coerce_color(value: object) -> Color:
     try:
         return Color(value)
@@ -220,6 +241,19 @@ class ResetAction(Action):
     type: ClassVar[str] = "reset"
 
 
+@register
+@dataclass(frozen=True)
+class NewGameAction(Action):
+    """選択したローカルルール構成で新規ゲームを開始する（house-rules 設定, #85）。
+
+    ``enabled_rule_ids`` は有効化するルール id の列（standard は必須で常に含まれる）。
+    構成の適用と盤面再初期化はサーバ（Session）が行う（サーバ権威）。
+    """
+
+    enabled_rule_ids: tuple[str, ...] = field(metadata={"coerce": coerce_rule_ids})
+    type: ClassVar[str] = "new_game"
+
+
 def parse(raw: str | bytes | bytearray | dict) -> Action:
     """JSON 文字列/バイト列または dict から Action を復元・検証する。
 
@@ -250,7 +284,9 @@ __all__ = [
     "ChallengeUnoAction",
     "PassAction",
     "ResetAction",
+    "NewGameAction",
     "register",
     "parse",
     "coerce_card_ids",
+    "coerce_rule_ids",
 ]

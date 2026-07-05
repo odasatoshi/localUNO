@@ -11,7 +11,7 @@ import itertools
 
 import pytest
 
-from lUNO.engine.actions import DrawAction, ResetAction
+from lUNO.engine.actions import DrawAction, NewGameAction, ResetAction
 from lUNO.server.session import (
     PLAYER_IDS,
     Session,
@@ -195,6 +195,117 @@ def test_reset_by_p2_also_works():
     s.apply(b.token, ResetAction("p2"))  # p2 からの再戦（reset は常時受理）
     assert len(s.view("p1").your_hand) == 7
     assert len(s.view("p2").your_hand) == 7
+
+
+# --- new_game（ルール構成の切替＋再配札, #85） -----------------------------
+
+
+def test_new_game_reconfigures_enabled_and_redeals():
+    """new_game で有効ルール集合が差し替わり、盤面が新規に配られる。"""
+    s = make_session()
+    a = s.connect()
+    s.connect()
+    s.apply(a.token, DrawAction("p1"))  # 盤面を動かす
+    s.apply(a.token, NewGameAction("p1", enabled_rule_ids=("reverse_off",)))
+    assert s.enabled_ids == frozenset({"reverse_off"})
+    assert len(s.view("p1").your_hand) == 7  # 再配札
+    assert len(s.view("p2").your_hand) == 7
+    # rules_meta が新構成を反映（standard は required で常に有効、集合外は無効）
+    meta = {m["id"]: m for m in s.rules_meta()}
+    assert meta["reverse_off"]["enabled"] is True
+    assert meta["standard"]["enabled"] is True
+    assert meta["uno_call"]["enabled"] is False
+
+
+def test_new_game_empty_is_standard_only():
+    """空選択は標準のみ（ハウスルール全無効）で新規ゲームになる。"""
+    s = make_session()
+    a = s.connect()
+    s.connect()
+    s.apply(a.token, NewGameAction("p1", enabled_rule_ids=()))
+    assert s.enabled_ids == frozenset()
+    meta = {m["id"]: m for m in s.rules_meta()}
+    assert meta["standard"]["enabled"] is True  # required は常時
+    assert all(not meta[k]["enabled"] for k in meta if k != "standard")
+
+
+def test_new_game_rejects_unknown_rule_id():
+    """未知のルールID を含む new_game は SessionError で弾く（構成ミスの黙認防止）。"""
+    s = make_session()
+    a = s.connect()
+    s.connect()
+    with pytest.raises(SessionError):
+        s.apply(a.token, NewGameAction("p1", enabled_rule_ids=("does_not_exist",)))
+
+
+def test_new_game_by_p2_also_works():
+    """どちらのプレイヤーからでも new_game を開始できる。"""
+    s = make_session()
+    s.connect()  # p1
+    b = s.connect()  # p2
+    s.apply(b.token, NewGameAction("p2", enabled_rule_ids=("multi_play",)))
+    assert s.enabled_ids == frozenset({"multi_play"})
+    assert len(s.view("p1").your_hand) == 7
+
+
+def _card(symbol, color, cid):
+    from lUNO.engine.cards import CardInstance, CardType
+
+    return CardInstance(CardType(symbol=symbol, color=color, label=symbol), id=cid)
+
+
+def _fixed_setup(players, seed):
+    """決定的な盤面: p1 は同数字の 7 を2枚（複数枚出し可否の観測用）。"""
+    import random
+
+    from lUNO.engine.cards import Color
+    from lUNO.engine.state import GameState
+
+    return GameState(
+        hands={
+            "p1": (_card("7", Color.RED, 1), _card("7", Color.BLUE, 2)),
+            "p2": (_card("9", Color.GREEN, 3),),
+        },
+        draw_pile=(_card("0", Color.RED, 4),),
+        discard_pile=(_card("3", Color.RED, 5),),  # 赤3: 赤7がリードとして合法
+        current_player="p1",
+        rng_state=random.Random(0).getstate(),
+        awaiting={"p1": ("play", "draw")},
+    )
+
+
+def _fixed_session():
+    counter = itertools.count(1)
+    return Session(seed=1, token_factory=lambda: f"tok{next(counter)}", setup=_fixed_setup)
+
+
+def test_new_game_rebuilds_registry_behaviorally_enable():
+    """multi_play を含めて new_game すると、複数枚出しが実際に受理される（registry 再構築の担保）。
+
+    rules_meta 反映だけでなく self._registry の組み直しを挙動で固定する
+    （registry 再構築を削るとこのテストが落ちる）。
+    """
+    from lUNO.engine.actions import PlayAction
+
+    s = _fixed_session()
+    a = s.connect()
+    s.connect()
+    s.apply(a.token, NewGameAction("p1", enabled_rule_ids=("multi_play",)))
+    s.apply(a.token, PlayAction("p1", card_ids=(1, 2)))  # 7 を2枚まとめ出し
+    assert len(s.view("p1").your_hand) == 0  # 2枚出して上がり（受理された）
+
+
+def test_new_game_rebuilds_registry_behaviorally_disable():
+    """multi_play を外して new_game すると、複数枚出しが拒否される（registry 再構築の担保）。"""
+    from lUNO.engine.actions import PlayAction
+    from lUNO.engine.engine import IllegalAction
+
+    s = _fixed_session()
+    a = s.connect()
+    s.connect()
+    s.apply(a.token, NewGameAction("p1", enabled_rule_ids=()))  # 標準のみ
+    with pytest.raises(IllegalAction):
+        s.apply(a.token, PlayAction("p1", card_ids=(1, 2)))  # 複数枚は不可
 
 
 # --- 配信対象（broadcast_targets） ------------------------------------------
