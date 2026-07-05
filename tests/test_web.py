@@ -180,9 +180,12 @@ def test_index_has_rematch_button_in_banner():
     """終局バナー内に再戦ボタンがある（#99）。"""
     assert 'id="rematch-btn"' in INDEX
     assert 'id="banner-msg"' in INDEX
-    # 再戦ボタンはバナー要素の内側に置く（終局時のみ表示される導線）
-    banner_start = INDEX.index('id="banner"')
-    assert INDEX.index('id="rematch-btn"') > banner_start
+    # 再戦ボタンはバナー要素の内側に置く（終局時のみ表示される導線）。banner は main
+    # 末尾要素なので、banner 開始タグより後・</main> より前にあることを確認する。
+    banner_open = INDEX.index('id="banner"')
+    main_close = INDEX.index("</main>")
+    assert banner_open < INDEX.index('id="rematch-btn"') < main_close
+    assert banner_open < INDEX.index('id="banner-msg"') < main_close
 
 
 def test_app_js_rematch_wired_to_reset():

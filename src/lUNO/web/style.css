@@ -212,9 +212,10 @@ body[data-turn="you"] .status::before { background: var(--on-accent); animation:
 .color-btn[data-color="blue"]   { background: var(--c-blue); }
 @keyframes pop { from { transform: scale(.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-/* 勝敗・引き分けバナー（オーバーレイ。中身は textContent のみ）。
-   pointer-events:none で下層のリセット/新規ゲームへクリックを透過させ、終局後も
-   再戦できるようにする（バナーは表示のみ, design.md §6）。 */
+/* 勝敗・引き分けバナー（オーバーレイ）。バナー面は pointer-events:none で下層の
+   リセット/新規ゲームへクリックを透過させるが、中央カード（banner-card＝メッセージ
+   ＋再戦ボタン）だけは pointer-events:auto でクリックを受ける（終局時の再戦導線,
+   #99, design.md §6）。 */
 .banner {
   position: fixed; inset: 0; z-index: 25; display: grid; place-items: center; padding: var(--s5);
   background: oklch(20% 0.03 300 / .5); backdrop-filter: blur(3px); pointer-events: none;
