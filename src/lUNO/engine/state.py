@@ -144,6 +144,20 @@ class GameState:
     def with_current_player(self, player_id: str) -> GameState:
         return self.replace(current_player=player_id)
 
+    def with_first_player(self, player_id: str) -> GameState:
+        """先攻（最初に手番を持つプレイヤー）を差し替える（ゲーム開始時の先攻決定用）。
+
+        ``current_player`` と ``awaiting`` を「その1人だけが play/draw 可能」に揃える。
+        配札・場札は先攻に依存しない（standard.setup_game は開始札の効果を適用しない）ため、
+        セットアップ後に先攻だけを付け替えても盤面の整合は保たれる。
+        """
+        if player_id not in self.hands:
+            raise ValueError(f"先攻に指定できないプレイヤー: {player_id!r}")
+        return self.replace(
+            current_player=player_id,
+            awaiting={player_id: (PlayAction.type, DrawAction.type)},
+        )
+
     def with_forced_color(self, color: Color | None) -> GameState:
         return self.replace(forced_color=color)
 

@@ -93,7 +93,8 @@ class Session:
         else:
             self._registry = default_registry()
         self._setup = setup if setup is not None else default_setup
-        self._state: GameState = self._setup(PLAYER_IDS, seed)
+        # 初回は先攻をランダムに決める（ハウスルール, #107）。以降の再戦は前ゲームの勝者を先攻。
+        self._state: GameState = self._start(seed, first_player=None)
         self._token_factory = token_factory or (lambda: secrets.token_hex(16))
         self._slots: dict[str, Slot] = {}  # token -> Slot
         self._by_player: dict[str, Slot] = {}  # player_id -> Slot
@@ -254,10 +255,31 @@ class Session:
                 GameEvent("win_streak", by=winner, amount=self._streak_count)
             )
 
+    def _start(self, seed: int, first_player: str | None) -> GameState:
+        """rules のセットアップで盤面を作り、先攻を決めて付け替える（#107）。
+
+        ``self._setup`` の signature（注入物含む）に先攻の概念を持ち込まず、
+        セットアップ後に :meth:`GameState.with_first_player` で先攻だけを揃える。
+
+        ``first_player=None`` なら**配札後の RNG ストリーム**から先攻をランダムに引く。
+        配札を消費した後のストリームから引くため山札・配札と無相関で、かつ同一 seed なら
+        再現的（§3.5）。``first_player`` 指定時（再戦の勝者先攻）はその値をそのまま使う。
+        """
+        state = self._setup(PLAYER_IDS, seed)
+        if first_player is None:
+            first_player, state = state.with_rng(lambda rng: rng.choice(PLAYER_IDS))
+        return state.with_first_player(first_player)
+
     def _reset(self) -> None:
-        """同じ2トークンのまま盤面を作り直す（再戦, §8）。新 seed は RNG から決定的に引く。"""
+        """同じ2トークンのまま盤面を作り直す（再戦, §8）。新 seed は RNG から決定的に引く。
+
+        ハウスルール(#107): 前ゲームの勝者を先攻にする。引き分け（勝者なし）は先攻を
+        ランダムに決め直す（``first_player=None`` でランダム引きに委ねる）。
+        """
         seed, _ = self._state.with_rng(lambda rng: rng.getrandbits(32))
-        self._state = self._setup(PLAYER_IDS, seed)
+        winner = self._state.winner
+        first = winner if winner in PLAYER_IDS else None
+        self._state = self._start(seed, first)
 
     def _new_game(self, enabled_rule_ids: Iterable[str]) -> None:
         """選択したルール構成**と順序**で実行器を組み直し、盤面を新規に作る（設定変更, #85/#92）。
@@ -282,7 +304,8 @@ class Session:
         self._enabled_ids = frozenset(ordered)
         self._registry = default_registry(ordered)  # tuple → 与えた順で積む
         seed, _ = self._state.with_rng(lambda rng: rng.getrandbits(32))
-        self._state = self._setup(PLAYER_IDS, seed)
+        # ルール変更しての新規開始は「勝者先攻」を適用せず、先攻はランダム（#107）。
+        self._state = self._start(seed, first_player=None)
 
 
 __all__ = [
