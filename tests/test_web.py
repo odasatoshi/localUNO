@@ -19,6 +19,7 @@ from lUNO.server.session import Session
 
 APP_JS = (WEB_DIR / "app.js").read_text(encoding="utf-8")
 INDEX = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+STYLE_CSS = (WEB_DIR / "style.css").read_text(encoding="utf-8")
 
 
 @pytest.fixture
@@ -79,6 +80,29 @@ def test_app_js_renders_playerview_and_uses_card_images():
     assert "/cards/" in APP_JS  # カード画像は static PNG を参照（§7）
     assert "image_key" in APP_JS
     assert "your_hand" in APP_JS
+
+
+def test_your_turn_highlights_own_zone():
+    """自分の番（body[data-turn="you"]）のとき自分ゾーン .you を枠強調する（#101）。
+    判定は app.js が body.dataset.turn にセット済みで、強調は CSS のみで行う。"""
+    # フロントは手番を body の data-turn に反映している（"you" を出す）
+    assert "dataset.turn" in APP_JS
+    assert '"you"' in APP_JS
+    # CSS 側: 自分の番のとき自分ゾーンを強調するセレクタと明滅アニメが結線されている
+    assert 'body[data-turn="you"] .you' in STYLE_CSS
+    assert "@keyframes your-turn" in STYLE_CSS
+    assert "animation: your-turn" in STYLE_CSS
+    # レイアウトを動かさないための透明枠を常時確保している（本 issue の肝）
+    assert "border: 2px solid transparent" in STYLE_CSS
+    # reduced-motion ブロック内で手番グローの明滅を止めている（新規 .you 向けの配慮を直接担保）
+    rm_block = STYLE_CSS[STYLE_CSS.index("prefers-reduced-motion") :]
+    assert 'body[data-turn="you"] .you' in rm_block
+    assert "animation: none" in rm_block
+    # 相手ゾーンや手番外へは強調を漏らさない（誤適用防止の否定アサーション）
+    assert 'body[data-turn="you"] .opp' not in STYLE_CSS
+    assert "your-turn" not in STYLE_CSS.replace("@keyframes your-turn", "").replace(
+        "animation: your-turn", ""
+    )  # 呼吸アニメは keyframes 定義と .you への結線以外に現れない
 
 
 def test_app_js_sends_actions_as_json():
