@@ -138,6 +138,14 @@ body[data-turn="you"] .status::before { background: var(--on-accent); animation:
   font-size: 1rem; border: 2px solid oklch(100% 0 0 / .15);
 }
 .card-slot { display: grid; place-items: center; min-width: 96px; min-height: 134px; }
+/* すて札スタック（#111）: 直近数枚を横に少し重ねて並べる。DOM 末尾＝最新が前面。
+   中央寄せの flex にし、負マージンで重ねる。狭い画面でも場からはみ出さないよう
+   スタック時のカードは小さめ・控えめな露出にする（PC では下の @media で拡大）。 */
+#discard-top { display: flex; align-items: center; justify-content: center; }
+#discard-top .discard-card { width: 60px; margin-left: -40px; box-shadow: var(--shadow-2); }
+#discard-top .discard-card:first-child { margin-left: 0; }
+/* 古い札ほどわずかに小さく淡く＝奥行きを出し、最新（前面）を目立たせる。 */
+#discard-top .discard-card:not(:last-child) { transform: scale(.94); opacity: .82; }
 .forced-color {
   min-width: 52px; padding: 8px 12px; border-radius: 10px; text-align: center;
   font-family: var(--font-ui); font-weight: 800; font-size: .8rem;
@@ -286,6 +294,8 @@ body[data-turn="you"] .you {
   #draw-count { width: 84px; }
   .card-slot { min-width: 128px; }
   .card-slot .card { width: 128px; }
+  /* PC は広いのでスタックのカードも露出も大きくする（#111）。 */
+  #discard-top .discard-card { width: 84px; margin-left: -52px; }
   .hand { justify-content: center; padding-bottom: var(--s3); }
   .hand .card { width: 84px; }
   .card-wrap { margin-left: -26px; }

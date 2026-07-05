@@ -173,6 +173,31 @@ def test_player_view_top_of_pile_none_when_empty():
     assert view.to_dict()["top_of_pile"] is None
 
 
+def test_player_view_recent_discards_exposes_last_five_in_order():
+    # すて札の直近5枚を古い→新しいの順で公開する（#111）。6枚積めば最古の1枚は落ちる。
+    st = make_state()
+    pile = tuple(
+        CardInstance(CardType(symbol=str(n), color=Color.RED, label=str(n)), id=n) for n in range(6)
+    )
+    view = player_view(st.replace(discard_pile=pile), "p1")
+    ids = [c["id"] for c in view.to_dict()["recent_discards"]]
+    assert ids == [1, 2, 3, 4, 5]  # 直近5枚・古い→新しい（末尾=トップ）
+    assert view.to_dict()["top_of_pile"]["id"] == 5  # トップは末尾と一致
+
+
+def test_player_view_recent_discards_shorter_when_few():
+    # 5枚未満なら在るだけ返す。空なら空リスト。
+    st = make_state()
+    two = (
+        CardInstance(CardType(symbol="5", color=Color.GREEN, label="5"), id=11),
+        CardInstance(CardType(symbol="7", color=Color.BLUE, label="7"), id=12),
+    )
+    assert [c["id"] for c in player_view(st.replace(discard_pile=two), "p1").to_dict()[
+        "recent_discards"
+    ]] == [11, 12]
+    assert player_view(st, "p1").to_dict()["recent_discards"] == []
+
+
 def test_player_view_rejects_unknown_player():
     with pytest.raises(ValueError):
         player_view(make_state(), "nobody")

@@ -233,10 +233,21 @@ function render(view) {
   const oppCount = (view.hand_counts && view.hand_counts[opponent]) || 0;
   document.getElementById("opponent-count").textContent = oppCount + " 枚";
 
-  // 場
+  // 場: すて札は直近数枚を出した順（古い→新しい）に重ねて描く。相手の複数枚出しでも
+  // 何をどの順で出したか分かるようにする（#111）。最新（末尾）が前面。
   const discard = document.getElementById("discard-top");
   discard.replaceChildren();
-  if (view.top_of_pile) discard.appendChild(cardImg(view.top_of_pile));
+  const pile =
+    view.recent_discards && view.recent_discards.length
+      ? view.recent_discards
+      : view.top_of_pile
+        ? [view.top_of_pile] // 後方互換: recent_discards が無ければトップ1枚
+        : [];
+  for (const card of pile) {
+    const el = cardImg(card);
+    el.classList.add("discard-card");
+    discard.appendChild(el);
+  }
   document.getElementById("draw-count").textContent = view.draw_count + " 枚";
   const forced = document.getElementById("forced-color");
   forced.textContent = view.forced_color || "-";
