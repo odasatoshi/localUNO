@@ -9,9 +9,11 @@ Type=simple
 User=oda
 WorkingDirectory=/home/oda/localUNO
 # nginx 経由のみ公開するため 127.0.0.1 に待受を絞る（8000 をLANへ直接晒さない）。
-# uv の絶対パスは環境に合わせて調整すること（`command -v uv` で確認）。
-# 例では ~/.local/bin/uv。起動時にカード画像を差分生成してから uvicorn を立てる。
-ExecStart=/home/oda/.local/bin/uv run luno --host 127.0.0.1 --port 8000
+# 起動時にカード画像を差分生成してから uvicorn を立てる（luno CLI の実挙動）。
+# uv はログインシェル経由で PATH 解決する（インストール先が ~/.local/bin か
+# ~/.cargo/bin かは環境差があるため、絶対パス直書きを避ける）。PATH に uv が無い
+# 環境では下行を実際の絶対パス（`command -v uv` の値）に置き換えること。
+ExecStart=/bin/bash -lc 'exec uv run luno --host 127.0.0.1 --port 8000'
 Restart=on-failure
 RestartSec=3
 
