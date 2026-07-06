@@ -108,6 +108,24 @@ def test_app_js_renders_discard_history():
     assert "top_of_pile" in APP_JS  # フォールバックが残っている
 
 
+def test_discard_newest_card_stacks_on_top():
+    """すて札の重ねは「奥=古い / 前面=最新」の順に描く（#113 回帰防止）。
+
+    古い札には transform/opacity が当たり、各々がスタッキング文脈（z-index auto=0）を
+    生む。最新札（:last-child）が素の flex アイテムのままだと古い札より先に描かれ「下」に
+    潜るため、最新札へ正の z-index を与えて前面へ引き上げている必要がある。これが無いと
+    「最後に出したカードが一番上に見えない」回帰が再発する。
+    """
+    # 回帰の原因側: 古い札に transform/opacity が当たっている（＝スタッキング文脈を生む）。
+    assert "#discard-top .discard-card:not(:last-child)" in STYLE_CSS
+    # 修正側: 最新札に正の z-index を与えて前面へ出している。
+    m = re.search(
+        r"#discard-top\s+\.discard-card:last-child\s*\{[^}]*z-index:\s*([1-9]\d*)",
+        STYLE_CSS,
+    )
+    assert m, "最新すて札(:last-child)に正の z-index を与える CSS 規則が必要"
+
+
 def test_your_turn_highlights_own_zone():
     """自分の番（body[data-turn="you"]）のとき自分ゾーン .you を枠強調する（#101）。
     判定は app.js が body.dataset.turn にセット済みで、強調は CSS のみで行う。"""
