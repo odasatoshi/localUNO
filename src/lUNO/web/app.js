@@ -33,6 +33,8 @@ const state = {
   // 直近のすて札トップの card.id（カード出し演出の差分検出用, #119）。トップが変われば
   // 「誰かが札を出した」とみなす。null なら未確立（初回/再接続直後は演出しない）。
   lastTopId: null,
+  // 直近の hand_counts スナップショット（出した人＝枚数が減ったプレイヤーの判定用, #121）。
+  lastHandCounts: null,
 };
 
 // --- 通信 ------------------------------------------------------------------
@@ -264,18 +266,28 @@ function render(view, animatePlay) {
   const isAppend =
     state.lastTopId !== null && pile.some((c, i) => c.id === state.lastTopId && i < pile.length - 1);
   if (animatePlay && feverOn() && newestId !== null && newestId !== state.lastTopId && isAppend) {
+    // 誰が出したか＝手札枚数が減ったプレイヤー（前 render のスナップショットと比較, #121）。
+    // 自分が出したなら下（手札側）から、相手なら上（相手側）から着地させ、勘違いを防ぐ。
+    // 各クライアントは自分視点（me）で判定するので、自分・相手のどちらも正しい向きになる。
+    const counts = view.hand_counts || {};
+    const prev = state.lastHandCounts || {};
+    const iPlayed = prev[me] != null && counts[me] != null && counts[me] < prev[me];
+    const dir = iPlayed ? "from-self" : "from-opp";
     const topEl = discard.querySelector(".discard-card:last-child");
     if (topEl) {
-      topEl.classList.add("fever-played");
+      topEl.classList.add("fever-played", dir);
       void topEl.offsetWidth; // reflow でアニメを確実に発火
-      // 着地後は .fever-played を外し、Fever のアイドル・パルス（last-child）を復帰させる。
-      topEl.addEventListener("animationend", () => topEl.classList.remove("fever-played"), { once: true });
+      // 着地後は付与クラスを外し、Fever のアイドル・パルス/グロー（last-child）へ戻す。animationend
+      // ではなくタイマーにするのは、reduced-motion だとアニメが走らず animationend が発火せず、
+      // クラスと着地グロー色が残るため（PR前レビュー指摘）。要素は次 render で作り直され取り残しも無害。
+      setTimeout(() => topEl.classList.remove("fever-played", dir), 600);
     }
     if (newestTop.symbol === "draw2" || newestTop.symbol === "draw4") {
       screenBurst(newestTop.symbol); // +2/+4 は画面全体に飛び交うバースト
     }
   }
   state.lastTopId = newestId;
+  state.lastHandCounts = view.hand_counts || null; // 次回の「出した人」判定用に控える
   document.getElementById("draw-count").textContent = view.draw_count + " 枚";
   const forced = document.getElementById("forced-color");
   forced.textContent = view.forced_color || "-";

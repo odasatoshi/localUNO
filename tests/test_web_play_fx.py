@@ -48,8 +48,19 @@ def test_style_css_defines_play_fx(tmp_path):
     """style.css が着地アニメ・全画面バースト・シェイクを定義している。"""
     client = make_client(tmp_path)
     css = client.get("/style.css").text
-    assert "@keyframes fever-land" in css  # 回転しながら着地
+    # 出した人で方向分け（自分＝下から / 相手＝上から）の別キーフレーム（#121）
+    assert "@keyframes fever-land-self" in css
+    assert "@keyframes fever-land-opp" in css
+    assert "from-self" in css and "from-opp" in css  # 付け分けクラスのスタイル
     assert ".fx-burst" in css  # 全画面バーストのレイヤー
     assert "@keyframes fx-fly" in css  # 破片が四方八方へ飛ぶ
     assert "@keyframes fx-shake" in css  # Draw4 の盤面シェイク
     assert 'data-fever="on"' in css  # 着地アニメは Fever スコープ
+
+
+def test_app_js_picks_play_direction_by_hand_count(tmp_path):
+    """出した人（枚数が減ったプレイヤー）で登場方向クラスを付け分ける（#121）。"""
+    client = make_client(tmp_path)
+    js = client.get("/app.js").text
+    assert "lastHandCounts" in js  # 前 render の手札枚数スナップショット
+    assert "from-self" in js and "from-opp" in js  # 自分/相手の方向クラス
