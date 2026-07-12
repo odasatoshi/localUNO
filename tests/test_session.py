@@ -607,3 +607,117 @@ def test_streak_rebuilds_after_winner_change():
     st = s.apply(b.token, PlayAction("p2", (1,)))  # p2 が連勝（2）
     assert st.winner == "p2"
     assert st.last_event == GameEvent("win_streak", by="p2", amount=2)
+
+
+# --- 参加者リセット（別ブラウザへの入れ替え, #115） ------------------------
+
+
+def test_reset_players_frees_other_seat_and_keeps_requester():
+    """要求者は在席・トークン維持。相手席は解放し、現行接続を evicted で返す。"""
+    s = make_session()
+    conn1, conn2 = object(), object()
+    a = s.connect(conn=conn1)  # p1
+    b = s.connect(conn=conn2)  # p2
+    res = s.reset_players(a.token)
+    assert s.player_of(a.token) == "p1"  # 要求者は在席
+    assert s.player_of(b.token) is None  # 相手席・トークンは解放
+    assert res.evicted == [conn2]  # 解放した相手の現行接続を返す
+    assert s.waiting_for_opponent() is True  # 片席のみ＝待機
+    # 空いた p2 席は次の接続が埋める（先着）
+    c = s.connect(conn=object())
+    assert c.player_id == "p2"
+    assert s.waiting_for_opponent() is False
+
+
+def test_reset_players_by_p2_keeps_p2_and_frees_p1():
+    """どちらの席からでも実行でき、実行者が残り相手が抜ける。"""
+    s = make_session()
+    a = s.connect()  # p1
+    b = s.connect()  # p2
+    s.reset_players(b.token)  # p2 が実行
+    assert s.player_of(b.token) == "p2"  # 実行者は在席
+    assert s.player_of(a.token) is None  # 相手(p1)席は解放
+    c = s.connect()
+    assert c.player_id == "p1"  # 空いた p1 席に新規が入る
+
+
+def test_reset_players_evicts_only_connected_conns():
+    """切断中（conn=None）の相手席も解放するが、閉じる対象は evicted に載せない。"""
+    s = make_session()
+    a = s.connect(conn=object())  # p1
+    b = s.connect(conn=object())  # p2
+    s.disconnect(b.token)  # p2 は切断中（席は残る）
+    res = s.reset_players(a.token)
+    assert res.evicted == []  # 閉じる現行接続は無い
+    assert s.player_of(b.token) is None  # それでも席は解放される
+
+
+def test_reset_players_redeals_full_hands():
+    """参加者リセットは盤面を作り直す（両者分 7 枚が配られる）。"""
+    s = make_session()
+    a = s.connect()
+    s.connect()
+    s.apply(a.token, DrawAction("p1"))  # 盤面を動かす
+    s.reset_players(a.token)
+    assert len(s.view("p1").your_hand) == 7
+    assert len(s.view("p2").your_hand) == 7
+
+
+def test_reset_players_unknown_token_raises():
+    s = make_session()
+    with pytest.raises(SessionError):
+        s.reset_players("nope")
+
+
+def test_reset_players_rejects_player_mismatch():
+    """トークンと player 不一致（なりすまし）は拒否する。"""
+    s = make_session()
+    a = s.connect()  # p1
+    s.connect()  # p2
+    with pytest.raises(SessionError):
+        s.reset_players(a.token, player="p2")
+
+
+def test_reset_players_resets_streak():
+    """参加者リセットは顔ぶれが変わる仕切り直し＝連勝をリセットする。
+
+    観測ベース: 2連勝後に参加者リセットすると、直後の勝利は「1連勝目」に戻り
+    win_streak イベントが出ない。
+    """
+    s = _streak_session()
+    a = s.connect()  # p1
+    s.connect()  # p2
+    s.apply(a.token, PlayAction("p1", (1,)))  # 1勝目
+    s.apply(a.token, ResetAction("p1"))
+    s.apply(a.token, PlayAction("p1", (1,)))  # 2勝目（win_streak が出ている）
+    s.reset_players(a.token)  # 参加者リセット＝連勝リセット・p2 席解放
+    s.connect()  # 新しい p2 が着席（待機ゲート解除）
+    s._state = s._state.with_first_player("p1")  # 先攻ランダム(#107)と切り離し p1 手番に固定
+    st = s.apply(a.token, PlayAction("p1", (1,)))  # リセット後の1勝目
+    assert st.winner == "p1"
+    assert st.last_event is None  # リセット済みなので連勝カットインは出ない
+
+
+# --- 待機ゲート（両席そろうまで進行不可, #115） -----------------------------
+
+
+def test_waiting_gate_blocks_game_action_until_both_seated():
+    """片席のみの間はゲーム操作を拒否し、相手着席後に通す。"""
+    s = make_session()
+    a = s.connect()  # p1 のみ
+    with pytest.raises(SessionError, match="対戦相手"):
+        s.apply(a.token, DrawAction("p1"))
+    s.connect()  # p2 着席 → ゲート解除
+    s._state = s._state.with_first_player("p1")  # p1 手番に固定
+    before = len(s.view("p1").your_hand)
+    s.apply(a.token, DrawAction("p1"))  # 今度は通る
+    assert len(s.view("p1").your_hand) == before + 1
+
+
+def test_reset_and_new_game_allowed_while_waiting():
+    """仕切り直し系（reset/new_game）は待機中（1人）でも実行できる。"""
+    s = make_session()
+    a = s.connect()  # p1 のみ（待機中）
+    s.apply(a.token, ResetAction("p1"))  # 拒否されない
+    s.apply(a.token, NewGameAction("p1", enabled_rule_ids=("reverse_off",)))
+    assert s.enabled_ids == frozenset({"standard", "reverse_off"})

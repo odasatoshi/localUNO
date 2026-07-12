@@ -270,6 +270,26 @@ body[data-turn="you"] .you {
 #rematch-btn:hover { filter: brightness(1.06); }
 #rematch-btn:active { transform: translateY(1px); }
 
+/* 待機/退席オーバーレイ（#115）。バナーと違い操作をブロックしたいので、面自体を
+   pointer-events:auto にして下層の盤面へクリックを通さない（待機ゲート＝進行不可）。
+   evicted 時のみリロードボタンを出す。z-index はバナー(25)より上・カットイン(30)相当。 */
+.gate {
+  position: fixed; inset: 0; z-index: 28; display: grid; place-items: center; padding: var(--s5);
+  background: oklch(20% 0.03 300 / .55); backdrop-filter: blur(3px); pointer-events: auto;
+  font-family: var(--font-ui); font-weight: 800; font-size: clamp(1.25rem, 5vw, 1.9rem);
+  color: #fff; text-align: center; text-shadow: 0 2px 12px oklch(0% 0 0 / .4);
+}
+.gate:not(.hidden) { animation: pop .22s var(--ease-out); }
+.gate-card { display: grid; gap: var(--s4); justify-items: center; }
+#gate-reload {
+  font-family: var(--font-ui); font-weight: 800; font-size: clamp(1rem, 3.5vw, 1.25rem);
+  padding: var(--s3) var(--s5); color: var(--on-accent);
+  background: linear-gradient(135deg, var(--grape-2), var(--grape));
+  border: none; border-radius: 999px; cursor: pointer; box-shadow: 0 6px 20px oklch(0% 0 0 / .35);
+}
+#gate-reload:hover { filter: brightness(1.06); }
+#gate-reload:active { transform: translateY(1px); }
+
 /* カットイン（UNO!/指摘/強制ドローの一瞬の演出, #97）。中央に大きくスライドイン→
    ホールド→フェード。クリックは透過（pointer-events:none）。tone で色味を変える。 */
 .cutin {

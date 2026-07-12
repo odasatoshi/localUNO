@@ -68,6 +68,7 @@ def test_ws_welcome_and_action_broadcasts_playerview(tmp_path):
         with client.websocket_connect("/ws") as ws2:
             w2 = ws2.receive_json()
             assert w2["player_id"] == "p2"
+            ws1.receive_json()  # 相手参加でゲート解除の state が既存接続へ届く（#115）
 
             # p1 がドロー → 両者へ state がブロードキャストされる
             ws1.send_text('{"type":"draw","player":"p1"}')
@@ -132,6 +133,7 @@ def test_ws_new_game_broadcasts_state_with_updated_rules(tmp_path):
         ws1.receive_json()  # welcome
         with client.websocket_connect("/ws") as ws2:
             ws2.receive_json()  # welcome
+            ws1.receive_json()  # 相手参加でゲート解除の state（#115）
             ws1.send_text(
                 '{"type":"new_game","player":"p1","enabled_rule_ids":["reverse_off"]}'
             )
@@ -154,6 +156,7 @@ def test_ws_normal_action_broadcast_omits_rules(tmp_path):
         ws1.receive_json()
         with client.websocket_connect("/ws") as ws2:
             ws2.receive_json()
+            ws1.receive_json()  # 相手参加でゲート解除の state（#115）
             ws1.send_text('{"type":"draw","player":"p1"}')
             s1 = ws1.receive_json()
             assert s1["type"] == "state"
@@ -167,6 +170,7 @@ def test_ws_new_game_unknown_rule_id_returns_error(tmp_path):
         ws1.receive_json()
         with client.websocket_connect("/ws") as ws2:
             ws2.receive_json()
+            ws1.receive_json()  # 相手参加でゲート解除の state（#115）
             ws1.send_text(
                 '{"type":"new_game","player":"p1","enabled_rule_ids":["bogus"]}'
             )
@@ -202,9 +206,14 @@ def test_ws_reconnect_with_token_restores_view(tmp_path):
     with client.websocket_connect("/ws") as ws1:
         w1 = ws1.receive_json()
         token = w1["token"]
-        ws1.send_text('{"type":"draw","player":"p1"}')
-        ws1.receive_json()  # state（p1 は8枚）
-    # ws1 切断後、同トークンで再接続 → 手札が復元される
+        # 待機ゲート（#115）解除のため相手も接続してから操作する
+        with client.websocket_connect("/ws") as ws2:
+            ws2.receive_json()  # welcome
+            ws1.receive_json()  # 相手参加でゲート解除の state
+            ws1.send_text('{"type":"draw","player":"p1"}')
+            ws1.receive_json()  # state（p1 は8枚）
+            ws2.receive_json()  # p2 にもブロードキャスト
+    # ws1 切断後、同トークンで再接続 → 手札が復元される（席は保持されている）
     with client.websocket_connect(f"/ws?token={token}") as ws1b:
         wb = ws1b.receive_json()
         assert wb["type"] == "welcome"
@@ -232,6 +241,7 @@ def test_ws_reset_broadcasts_fresh_game(tmp_path):
         ws1.receive_json()
         with client.websocket_connect("/ws") as ws2:
             ws2.receive_json()
+            ws1.receive_json()  # 相手参加でゲート解除の state（#115）
             ws1.send_text('{"type":"draw","player":"p1"}')
             ws1.receive_json()
             ws2.receive_json()
@@ -241,6 +251,47 @@ def test_ws_reset_broadcasts_fresh_game(tmp_path):
             s2 = ws2.receive_json()
             assert len(s1["view"]["your_hand"]) == 7
             assert s2["view"]["hand_counts"]["p1"] == 7
+
+
+def test_ws_welcome_waiting_flag_and_lifts_on_join(tmp_path):
+    """単独接続は waiting_for_opponent=True、相手参加で False の state が既存接続へ届く（#115）。"""
+    client = make_client(tmp_path)
+    with client.websocket_connect("/ws") as ws1:
+        w1 = ws1.receive_json()
+        assert w1["type"] == "welcome"
+        assert w1["waiting_for_opponent"] is True  # 相手待ち
+        with client.websocket_connect("/ws") as ws2:
+            w2 = ws2.receive_json()
+            assert w2["waiting_for_opponent"] is False  # 2人揃った
+            s1 = ws1.receive_json()  # 既存接続へゲート解除の state が届く
+            assert s1["type"] == "state"
+            assert s1["waiting_for_opponent"] is False
+
+
+def test_ws_reset_players_evicts_opponent_and_opens_seat(tmp_path):
+    """reset_players で相手が evicted され席が開き、新規接続が p2 を埋める（#115）。"""
+    client = make_client(tmp_path)
+    with client.websocket_connect("/ws") as ws1:
+        ws1.receive_json()  # welcome
+        with client.websocket_connect("/ws") as ws2:
+            ws2.receive_json()  # welcome
+            ws1.receive_json()  # 相手参加のゲート解除 state
+            # p1 が参加者リセット
+            ws1.send_text('{"type":"reset_players","player":"p1"}')
+            # p1 には相手席が空いた待機 state が届く
+            s1 = ws1.receive_json()
+            assert s1["type"] == "state"
+            assert s1["waiting_for_opponent"] is True
+            # 相手 ws2 には evicted 通知が届く（サーバは close せず、クライアントが自分で切断する）
+            m = ws2.receive_json()
+            assert m["type"] == "evicted"
+        # 別ブラウザ（新規接続）が空いた p2 席を埋め、p1 のゲートが再解除される
+        with client.websocket_connect("/ws") as ws3:
+            w3 = ws3.receive_json()
+            assert w3["player_id"] == "p2"
+            assert w3["waiting_for_opponent"] is False
+            s1b = ws1.receive_json()
+            assert s1b["waiting_for_opponent"] is False
 
 
 def test_ws_rejects_impersonation(tmp_path):

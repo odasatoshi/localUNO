@@ -28,6 +28,9 @@ def _play_full_game(seed: int, max_steps: int = 4000) -> dict:
     with client.websocket_connect("/ws") as ws1, client.websocket_connect("/ws") as ws2:
         socks = {"p1": ws1, "p2": ws2}
         views = {"p1": ws1.receive_json()["view"], "p2": ws2.receive_json()["view"]}
+        # p2 の参加で既存接続(p1)へゲート解除の state が届く（#115）。以降の受信同期の
+        # ため一度だけ捨てる（両者そろって待機ゲートは解除済み）。
+        ws1.receive_json()
 
         def broadcast_into(views: dict) -> None:
             # 成功 Action は両接続へ state がブロードキャストされる。想定外
