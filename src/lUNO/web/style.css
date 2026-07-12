@@ -289,6 +289,12 @@ body[data-turn="you"] .you {
 }
 #gate-reload:hover { filter: brightness(1.06); }
 #gate-reload:active { transform: translateY(1px); }
+/* 待機中もヘッダー（⟲リセット/⎋参加者リセット/テーマ）とルール設定パネルは使える
+   ようにする（待機ゲートは reset/new_game を免除しているので UI もそれに合わせる,
+   #85/#115）。ゲート(28)より上に載せてクリックを通す。盤面ゾーン（相手/場/自分）は
+   ゲート下のままなので操作はブロックされる。 */
+.topbar { position: relative; z-index: 29; }
+.rules-zone { position: relative; z-index: 29; }
 
 /* カットイン（UNO!/指摘/強制ドローの一瞬の演出, #97）。中央に大きくスライドイン→
    ホールド→フェード。クリックは透過（pointer-events:none）。tone で色味を変える。 */

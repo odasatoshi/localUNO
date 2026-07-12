@@ -31,10 +31,11 @@ from ..engine.actions import ActionError, NewGameAction, ResetPlayersAction, par
 from ..engine.engine import EngineError
 from .session import Session, SessionError, SessionFull
 
-# 参加者リセット（#115）で退席させる旧接続へ送る通知。旧接続の close はこのハンドラ
-# （別接続のタスク）からは配信が不安定なので**サーバからは close せず**、クライアントが
-# この通知を受けて自分で切断・再接続停止し「参加するにはリロード」を表示する。これで
-# 旧ブラウザが空席を自動再接続で奪わない。送信は現行接続への send と同経路で確実。
+# 参加者リセット（#115）で退席させる旧接続へ送る通知。まず evicted を送ってから
+# サーバ側で close する（多重接続の後勝ち result.replaced.close() と同じ経路）。
+# クライアントは evicted を受けて再接続停止フラグを立て「参加するにはリロード」を
+# 表示し、続く close でも自動再接続しない。サーバが席解放＋切断まで担保するため、
+# 旧接続がゾンビ化せず、クライアント実装だけに席掌握を委ねない（サーバ権威）。
 EVICTED_MESSAGE = "参加者がリセットされました。参加するにはリロードしてください。"
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
@@ -130,13 +131,13 @@ def create_app(
                 try:
                     act = parse(raw)
                     if act.type == ResetPlayersAction.type:
-                        # 参加者リセット（#115）: 相手席を解放し、旧接続へ evicted 通知を送る。
-                        # サーバからは close しない（別接続タスクからの close は配信が不安定）。
-                        # クライアントが通知を受けて自分で切断・再接続停止する。
+                        # 参加者リセット（#115）: 相手席を解放し、旧接続へ evicted 通知を
+                        # 送ってからサーバ側で close する（席解放＋切断をサーバで担保）。
                         res = session.reset_players(result.token, act.player)
                         for old in res.evicted:
                             try:
                                 await old.send_json({"type": "evicted", "message": EVICTED_MESSAGE})
+                                await old.close()
                             except Exception:  # noqa: BLE001 切断途中などは握りつぶす
                                 pass
                     else:

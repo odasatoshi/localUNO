@@ -109,12 +109,12 @@ function handleMessage(msg) {
     state.waiting = Boolean(msg.waiting_for_opponent);
     updateGate();
   } else if (msg.type === "evicted") {
-    // 参加者リセットで退席（#115）。自動再接続を止め、自分から切断してリロード待機に
-    // する（サーバは close しない）。先着の別ブラウザに席を渡すため席を取りにいかない。
+    // 参加者リセットで退席（#115）。この直後サーバが close するので、再接続停止フラグを
+    // 立てて（onclose で自動再接続しない）「参加するにはリロード」を表示する。先着の
+    // 別ブラウザに席を渡すため、ここで席を取りにいかない。
     state.evicted = true;
     state.stop = true;
     updateGate();
-    if (state.ws) state.ws.close();
   } else if (msg.type === "error") {
     setStatus("エラー: " + msg.message);
     // 満席（3人目以降）はサーバが close する。無限リトライを止める。
@@ -449,6 +449,8 @@ let cutinTimer = null;
 function showCutIn(ev, me) {
   const el = document.getElementById("cutin");
   if (!el || !ev) return;
+  // 待機/退席オーバーレイ表示中はカットインを出さない（ゲートより前面に出さない, #115）。
+  if (state.waiting || state.evicted) return;
   const c = cutinContent(ev, me);
   if (!c) return;
   // 文言は固定文＋数値＋あなた/あいて のみ（外部入力なし）。

@@ -254,8 +254,8 @@ class Session:
             self.release(other.token)  # 相手席のみ解放（要求者は据え置き）
 
         # 顔ぶれが変わる仕切り直し＝新規対局扱い。先攻はランダム、連勝はリセット（#107/#108）。
-        seed, _ = self._state.with_rng(lambda rng: rng.getrandbits(32))
-        self._state = self._start(seed, first_player=None)
+        # 相手が元々いない（evicted 空）場合も新規対局として作り直す（明示リセットの一貫動作）。
+        self._redeal(first_player=None)
         self._streak_holder = None
         self._streak_count = 0
         return ResetPlayersResult(evicted=evicted)
@@ -338,16 +338,25 @@ class Session:
             first_player, state = state.with_rng(lambda rng: rng.choice(PLAYER_IDS))
         return state.with_first_player(first_player)
 
+    def _redeal(self, first_player: str | None) -> None:
+        """新 seed を現在の RNG ストリームから決定的に引き、盤面を作り直す（#107）。
+
+        再戦(:meth:`_reset`)・ルール変更(:meth:`_new_game`)・参加者リセット
+        (:meth:`reset_players`) 共通の「新 seed → :meth:`_start`」を一元化する。
+        ``first_player`` は先攻指定（``None`` なら配札後 RNG からランダム）。
+        """
+        seed, _ = self._state.with_rng(lambda rng: rng.getrandbits(32))
+        self._state = self._start(seed, first_player)
+
     def _reset(self) -> None:
         """同じ2トークンのまま盤面を作り直す（再戦, §8）。新 seed は RNG から決定的に引く。
 
         ハウスルール(#107): 前ゲームの勝者を先攻にする。引き分け（勝者なし）は先攻を
         ランダムに決め直す（``first_player=None`` でランダム引きに委ねる）。
         """
-        seed, _ = self._state.with_rng(lambda rng: rng.getrandbits(32))
         winner = self._state.winner
         first = winner if winner in PLAYER_IDS else None
-        self._state = self._start(seed, first)
+        self._redeal(first)
 
     def _new_game(self, enabled_rule_ids: Iterable[str]) -> None:
         """選択したルール構成**と順序**で実行器を組み直し、盤面を新規に作る（設定変更, #85/#92）。
@@ -371,9 +380,8 @@ class Session:
         self._ordered_ids = ordered
         self._enabled_ids = frozenset(ordered)
         self._registry = default_registry(ordered)  # tuple → 与えた順で積む
-        seed, _ = self._state.with_rng(lambda rng: rng.getrandbits(32))
         # ルール変更しての新規開始は「勝者先攻」を適用せず、先攻はランダム（#107）。
-        self._state = self._start(seed, first_player=None)
+        self._redeal(first_player=None)
 
 
 __all__ = [

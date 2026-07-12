@@ -282,9 +282,11 @@ def test_ws_reset_players_evicts_opponent_and_opens_seat(tmp_path):
             s1 = ws1.receive_json()
             assert s1["type"] == "state"
             assert s1["waiting_for_opponent"] is True
-            # 相手 ws2 には evicted 通知が届く（サーバは close せず、クライアントが自分で切断する）
+            # 相手 ws2 には evicted 通知が届き、続けてサーバが close する
             m = ws2.receive_json()
             assert m["type"] == "evicted"
+            with pytest.raises(WebSocketDisconnect):
+                ws2.receive_json()
         # 別ブラウザ（新規接続）が空いた p2 席を埋め、p1 のゲートが再解除される
         with client.websocket_connect("/ws") as ws3:
             w3 = ws3.receive_json()
@@ -292,6 +294,32 @@ def test_ws_reset_players_evicts_opponent_and_opens_seat(tmp_path):
             assert w3["waiting_for_opponent"] is False
             s1b = ws1.receive_json()
             assert s1b["waiting_for_opponent"] is False
+
+
+def test_ws_reset_players_rejects_impersonation(tmp_path):
+    """reset_players で他プレイヤーを騙るトークンは error を返す（#115）。"""
+    client = make_client(tmp_path)
+    with client.websocket_connect("/ws") as ws1:
+        ws1.receive_json()
+        with client.websocket_connect("/ws") as ws2:
+            ws2.receive_json()
+            ws1.receive_json()  # 相手参加でゲート解除の state
+            # p1 のトークンで p2 として参加者リセットしようとする
+            ws1.send_text('{"type":"reset_players","player":"p2"}')
+            m = ws1.receive_json()
+            assert m["type"] == "error"
+
+
+def test_ws_game_action_blocked_while_waiting(tmp_path):
+    """片席のみ（相手待ち）の間、ゲーム操作は error で拒否される（待機ゲート #115）。"""
+    client = make_client(tmp_path)
+    with client.websocket_connect("/ws") as ws1:
+        w1 = ws1.receive_json()
+        assert w1["waiting_for_opponent"] is True
+        ws1.send_text('{"type":"draw","player":"p1"}')
+        m = ws1.receive_json()
+        assert m["type"] == "error"
+        assert "対戦相手" in m["message"]
 
 
 def test_ws_rejects_impersonation(tmp_path):
