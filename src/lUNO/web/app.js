@@ -438,6 +438,54 @@ function applyTheme(pref) {
   }
 }
 
+// --- Fever モード（やりすぎド派手演出のトグル, #116） -----------------------
+
+// ゲーム状態とは完全に無関係な純表示設定（サーバへ何も送らない＝サーバ権威を侵さない）。
+// テーマ切替と同じ作法で documentElement に data-fever="on" を立て、派手演出は
+// すべて CSS 駆動にする。設定は localStorage に保存し、リロードでも復元する。
+const FEVER_KEY = "luno_fever";
+
+function feverOn() {
+  return localStorage.getItem(FEVER_KEY) === "on";
+}
+
+// data-fever と、ボタンの見た目（アイコン・aria-pressed）を現在の ON/OFF に合わせる。
+// burst=true のときだけ紙吹雪を一度出す（トグル ON の瞬間の演出。起動時の復元では出さない）。
+function applyFever(on, burst) {
+  const root = document.documentElement;
+  if (on) root.setAttribute("data-fever", "on");
+  else root.removeAttribute("data-fever");
+  const btn = document.getElementById("fever-btn");
+  if (btn) {
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    btn.textContent = on ? "🥳" : "🎉";
+  }
+  if (on && burst) confettiBurst();
+}
+
+// 紙吹雪バースト（演出のみ・状態に無関係, #116）。絵文字を画面上から降らせ、アニメ終了後に
+// レイヤーごと DOM を掃除する。動きを抑えたいユーザー（prefers-reduced-motion）には出さない。
+function confettiBurst() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const layer = document.createElement("div");
+  layer.className = "confetti";
+  const pieces = ["🎉", "🎊", "✨", "🌈", "⭐️", "💜", "🔥", "🎈"];
+  for (let i = 0; i < 48; i++) {
+    const p = document.createElement("span");
+    p.className = "confetti-piece";
+    p.textContent = pieces[i % pieces.length];
+    // 位置・落下時間・遅延・大きさをばらけさせて自然に散らす（個体差はインラインで与える）。
+    p.style.left = Math.random() * 100 + "vw";
+    p.style.animationDelay = Math.random() * 0.5 + "s";
+    p.style.animationDuration = 1.6 + Math.random() * 1.4 + "s";
+    p.style.fontSize = 1 + Math.random() * 1.4 + "rem";
+    layer.appendChild(p);
+  }
+  document.body.appendChild(layer);
+  // 最長（delay 最大 .5s ＋ duration 最大 3s）を見込んで確実に掃除する。
+  setTimeout(() => layer.remove(), 4000);
+}
+
 // --- 入力ハンドラ（送信のみ） ---------------------------------------------
 
 function wireControls() {
@@ -473,6 +521,16 @@ function wireControls() {
       applyTheme(next);
     });
   }
+  // Fever モード切替（#116）。ゲームには無関係な純表示設定。トグルして localStorage に
+  // 保存し、ON にした瞬間だけ紙吹雪を出す。
+  const feverBtn = document.getElementById("fever-btn");
+  if (feverBtn) {
+    feverBtn.addEventListener("click", () => {
+      const next = !feverOn();
+      localStorage.setItem(FEVER_KEY, next ? "on" : "off");
+      applyFever(next, true);
+    });
+  }
   document.querySelectorAll(".color-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       send({ type: "choose_color", player: state.me, color: btn.dataset.color });
@@ -493,6 +551,7 @@ function toggleClass(el, cls, on) {
 
 window.addEventListener("DOMContentLoaded", () => {
   applyTheme(localStorage.getItem(THEME_KEY));
+  applyFever(feverOn(), false); // 保存済み設定を復元（起動時は紙吹雪を出さない, #116）
   // OS のライト/ダーク変更に追従（data-theme 未設定＝自動追従のときアイコンも更新）。
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
     if (!document.documentElement.hasAttribute("data-theme")) applyTheme(null);

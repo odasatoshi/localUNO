@@ -100,6 +100,7 @@ body[data-turn="you"] .status::before { background: var(--on-accent); animation:
 }
 .ghost-btn:hover { color: var(--ink); border-color: var(--grape-2); }
 #theme-btn { padding: 0; width: 44px; font-size: 1rem; }
+#fever-btn { padding: 0; width: 44px; font-size: 1rem; }
 
 /* ルール設定（折りたたみ） */
 .rules-zone { background: var(--raise); border: 1px solid var(--line); border-radius: var(--radius); padding: 0 var(--s4); }
@@ -319,6 +320,114 @@ body[data-turn="you"] .you {
   .sheet { max-width: 420px; }
 }
 
+/* ===== Fever モード（やりすぎド派手演出のトグル, #116） =====================
+   documentElement の data-fever="on" で有効化する純表示レイヤー。ゲーム状態には無関係
+   （app.js はサーバへ何も送らない＝サーバ権威を侵さない）。虹色の動く背景・ネオングロー・
+   カードのウィグル・レインボー文字などで盤面を一気にパーティ仕様にする。演出はすべて
+   CSS 駆動。動きを抑えたいユーザー向けの抑制は末尾の prefers-reduced-motion が担う
+   （!important でアニメ時間を殺すので、色味は残しつつ動きだけ止まる）。 */
+
+/* 虹色の動く背景（全面固定レイヤー）。盤面ゾーンは自前の背景を持つので下に敷いても
+   可読性は保てる。クリックは透過（pointer-events:none）。 */
+:root[data-fever="on"] body::before {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background: linear-gradient(45deg,
+    hsl(0 90% 60%), hsl(45 95% 60%), hsl(90 85% 55%), hsl(150 80% 50%),
+    hsl(200 90% 55%), hsl(260 85% 62%), hsl(320 90% 62%), hsl(360 90% 60%));
+  background-size: 400% 400%;
+  animation: fever-bg 8s linear infinite;
+  opacity: .5;
+}
+/* 盤面本体は背景レイヤー（body::before, z-index:0）より前面へ。 */
+:root[data-fever="on"] .board { position: relative; z-index: 1; }
+@keyframes fever-bg {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ブランド文字＝レインボーで塗って脈打たせる。 */
+:root[data-fever="on"] .brand,
+:root[data-fever="on"] .brand b {
+  background: linear-gradient(90deg, hsl(0 95% 60%), hsl(60 95% 55%), hsl(140 85% 50%), hsl(210 90% 58%), hsl(300 90% 62%), hsl(0 95% 60%));
+  background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: fever-text 3s linear infinite;
+}
+@keyframes fever-text { to { background-position: 200% 0; } }
+
+/* 手札カード＝ネオングロー＋ゆらゆらウィグル。選択中の札は持ち上げ（既存）を保ちたいので
+   除外し、ハイライトを潰さない。 */
+:root[data-fever="on"] .hand .card:not(.selected) {
+  box-shadow: 0 0 12px hsl(300 100% 65% / .9), 0 0 22px hsl(200 100% 60% / .7);
+}
+/* ウィグルは .card ではなく**ラッパ**に当てる。実行中アニメの transform は通常宣言を
+   上書きするため、.card に当てると既存の hover 持ち上げ（.hand .card:hover の translateY）が
+   死ぬ。ラッパを揺らせば .card 自身の hover/選択 transform はそのまま生きる（PR前レビュー指摘）。 */
+:root[data-fever="on"] .hand .card-wrap:not(:has(.card.selected)) {
+  animation: fever-wiggle 1.2s ease-in-out infinite;
+}
+@keyframes fever-wiggle {
+  0%, 100% { transform: rotate(-2.5deg); }
+  50%      { transform: rotate(2.5deg); }
+}
+/* すて札トップ＝派手にグロー＆脈動して主役感を出す。 */
+:root[data-fever="on"] #discard-top .discard-card:last-child {
+  box-shadow: 0 0 18px hsl(50 100% 60% / .95), 0 0 30px hsl(320 100% 62% / .8);
+  animation: fever-pulse 1s ease-in-out infinite;
+}
+@keyframes fever-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.08); }
+}
+
+/* 場全体にもうっすらグローを乗せる（hue-rotate はカード画像を歪めるので使わない）。 */
+:root[data-fever="on"] .table { border-color: transparent; box-shadow: 0 0 22px hsl(280 100% 65% / .45); }
+
+/* 主要ボタン＝ネオン発光。 */
+:root[data-fever="on"] #play-btn,
+:root[data-fever="on"] #new-game-btn,
+:root[data-fever="on"] #rematch-btn {
+  box-shadow: 0 0 14px hsl(280 100% 65% / .9), 0 0 26px hsl(190 100% 60% / .7);
+  animation: fever-pulse 1.4s ease-in-out infinite;
+}
+/* Fever ボタン自身＝ON の間ずっと光って自己主張する。 */
+:root[data-fever="on"] #fever-btn {
+  border-color: transparent;
+  box-shadow: 0 0 12px hsl(320 100% 65% / .95), 0 0 22px hsl(50 100% 60% / .8);
+  animation: fever-pulse 1s ease-in-out infinite;
+}
+
+/* 自分の番グロー＝虹色で激しく（既存の落ち着いた呼吸を上書き）。 */
+:root[data-fever="on"] body[data-turn="you"] .you {
+  border-color: transparent;
+  animation: fever-turn 1.2s linear infinite;
+}
+@keyframes fever-turn {
+  0%   { box-shadow: 0 0 0 4px hsl(0 100% 60% / .8),   0 0 26px hsl(0 100% 60% / .7); }
+  33%  { box-shadow: 0 0 0 4px hsl(140 100% 50% / .8), 0 0 26px hsl(140 100% 50% / .7); }
+  66%  { box-shadow: 0 0 0 4px hsl(220 100% 60% / .8), 0 0 26px hsl(220 100% 60% / .7); }
+  100% { box-shadow: 0 0 0 4px hsl(320 100% 62% / .8), 0 0 26px hsl(320 100% 62% / .7); }
+}
+
+/* カットイン＝Fever 時はレインボー枠＋色相回転で虹色に脈動。 */
+:root[data-fever="on"] .cutin-card {
+  box-shadow: 0 0 24px hsl(300 100% 65% / .9), 0 0 44px hsl(190 100% 60% / .7);
+  animation: fever-hue 2s linear infinite;
+}
+@keyframes fever-hue { to { filter: hue-rotate(360deg); } }
+
+/* 紙吹雪（app.js の confettiBurst が生成, #116）。最前面から降らせ、JS が掃除する。 */
+.confetti { position: fixed; inset: 0; z-index: 40; pointer-events: none; overflow: hidden; }
+.confetti-piece {
+  position: absolute; top: -10vh; will-change: transform, opacity;
+  animation-name: confetti-fall; animation-timing-function: linear; animation-fill-mode: both;
+}
+@keyframes confetti-fall {
+  0%   { transform: translateY(-10vh) rotate(0deg);   opacity: 1; }
+  100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
   /* カットインはスライドを止め静止表示にする（アニメ末尾が opacity:0 のため、
@@ -326,4 +435,13 @@ body[data-turn="you"] .you {
   .cutin:not(.hidden) .cutin-card { animation: none; opacity: 1; }
   /* 手番グローは明滅を止め、枠＋静的グローだけ残す（手番の可視性は保つ）。 */
   body[data-turn="you"] .you { animation: none; box-shadow: 0 0 0 4px color-mix(in oklch, var(--grape), transparent 80%); }
+  /* Fever のウィグル/パルスは、アニメを止めると開始キーフレームの傾き（-2.5°）や
+     途中スケールで静止してしまう。reduced-motion では幾何をリセットし、グロー等の
+     色味だけ残す（アニメを完全に切って素の transform に戻す, PR前レビュー指摘）。 */
+  :root[data-fever="on"] .hand .card-wrap:not(:has(.card.selected)),
+  :root[data-fever="on"] #discard-top .discard-card:last-child,
+  :root[data-fever="on"] #play-btn,
+  :root[data-fever="on"] #new-game-btn,
+  :root[data-fever="on"] #rematch-btn,
+  :root[data-fever="on"] #fever-btn { animation: none !important; transform: none; }
 }
