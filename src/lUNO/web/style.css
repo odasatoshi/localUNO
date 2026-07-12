@@ -463,14 +463,28 @@ body[data-turn="you"] .you {
    Fever ON 前提。動きの抑制は末尾の prefers-reduced-motion が担う（バースト/シェイクは JS が
    スキップ、着地アニメはアニメ時間 0 で即着地に落ちる）。 */
 
-/* 出したカード＝回転しながら上から落ちて着地（最新札に一度だけ）。fever-pulse（last-child）
-   より後に定義し、同順位の specificity で source order 勝ちさせて着地を優先する。着地後は
-   非 infinite なので静止（次の state 更新で最新でなくなる）。 */
-:root[data-fever="on"] #discard-top .discard-card.fever-played {
-  animation: fever-land .55s cubic-bezier(.2, .9, .25, 1.3) both;
+/* 出したカード＝回転しながら着地（最新札に一度だけ）。出した人で向き・回転・グロー色を
+   変え、どちらが出したか一目で分かるようにする（#121）: 自分＝下（手札側）から時計回りで、
+   相手＝上（相手側）から反時計回りで着地。セレクタはクラス2つ（.fever-played.from-*）で
+   fever-pulse（last-child）より specificity が高く、確実に着地を優先する。着地後は JS が
+   一定時間でクラスを外し、パルス/グローへ戻す。 */
+:root[data-fever="on"] #discard-top .discard-card.fever-played.from-self {
+  animation: fever-land-self .55s cubic-bezier(.2, .9, .25, 1.3) both;
+  box-shadow: 0 0 20px hsl(155 100% 55% / .95), 0 0 34px hsl(190 100% 60% / .7); /* クール系 */
 }
-@keyframes fever-land {
-  0%   { transform: translateY(-160%) rotate(-540deg) scale(.4); opacity: 0; }
+:root[data-fever="on"] #discard-top .discard-card.fever-played.from-opp {
+  animation: fever-land-opp .55s cubic-bezier(.2, .9, .25, 1.3) both;
+  box-shadow: 0 0 20px hsl(20 100% 60% / .95), 0 0 34px hsl(45 100% 58% / .7); /* ウォーム系 */
+}
+/* 自分＝画面下からせり上がる（+Y 始点＝手札側）。時計回り。 */
+@keyframes fever-land-self {
+  0%   { transform: translateY(180%) rotate(540deg) scale(.4); opacity: 0; }
+  70%  { opacity: 1; }
+  100% { transform: translateY(0) rotate(0) scale(1); opacity: 1; }
+}
+/* 相手＝画面上から降ってくる（-Y 始点＝相手側）。反時計回り。 */
+@keyframes fever-land-opp {
+  0%   { transform: translateY(-180%) rotate(-540deg) scale(.4); opacity: 0; }
   70%  { opacity: 1; }
   100% { transform: translateY(0) rotate(0) scale(1); opacity: 1; }
 }
