@@ -17,6 +17,9 @@
         <span class="brand">local-<b>UNO</b></span>
         <span id="status" class="status">接続中…</span>
         <button id="theme-btn" class="ghost-btn" type="button" aria-label="ライト/ダーク切替">🌙</button>
+        <!-- Fever モード（やりすぎド派手演出のトグル, #116）。ゲーム状態には無関係な
+             純表示設定。押すたびに data-fever を切替え、状態は app.js が localStorage に保存。 -->
+        <button id="fever-btn" class="ghost-btn" type="button" aria-pressed="false" aria-label="Feverモード切替">🎉</button>
         <button id="reset-btn" class="ghost-btn" type="button">⟲ リセット</button>
         <!-- 参加者リセット（#115）: 相手を退席させ、別ブラウザへの入れ替えを可能にする。
              既存の「⟲ リセット（同じ2人で再配札）」とは別物。押下時に確認を挟む。 -->
