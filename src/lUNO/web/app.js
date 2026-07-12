@@ -30,6 +30,9 @@ const state = {
   canPlay: false,
   // 有効ローカルルールのメタ（welcome で一度届く。確認パネルの表示用, #84）。
   rules: null,
+  // 直近のすて札トップの card.id（カード出し演出の差分検出用, #119）。トップが変われば
+  // 「誰かが札を出した」とみなす。null なら未確立（初回/再接続直後は演出しない）。
+  lastTopId: null,
 };
 
 // --- 通信 ------------------------------------------------------------------
@@ -81,7 +84,7 @@ function handleMessage(msg) {
       state.rules = msg.rules; // 有効ルールのメタ（確認パネル用, #84）
       renderRules(msg.rules);
     }
-    render(msg.view);
+    render(msg.view, false); // 再接続の復元描画。カード出し演出は出さない（#119）
   } else if (msg.type === "state") {
     // new_game 後の state はルールメタを同梱する。届いたときだけ設定パネルを更新
     // （通常の手番更新では送られないので、途中のチェック操作を消さない, #85）。
@@ -89,7 +92,7 @@ function handleMessage(msg) {
       state.rules = msg.rules;
       renderRules(msg.rules);
     }
-    render(msg.view);
+    render(msg.view, true); // 手番更新。すて札トップの変化でカード出し演出を発火（#119）
     // 直近アクションの出来事（UNO!/指摘/強制ドロー）をカットインで見せる（#97）。
     // welcome（再接続）では出さない＝古い出来事の再演を避ける。
     if (msg.view && msg.view.last_event) showCutIn(msg.view.last_event, state.me);
@@ -222,7 +225,7 @@ function startNewGame() {
   send({ type: "new_game", player: state.me, enabled_rule_ids: ids });
 }
 
-function render(view) {
+function render(view, animatePlay) {
   state.view = view;
   const me = state.me;
   const opponent = me === "p1" ? "p2" : "p1";
@@ -248,6 +251,31 @@ function render(view) {
     el.classList.add("discard-card");
     discard.appendChild(el);
   }
+  // カード出し演出（Fever 限定, #119）。すて札トップ（末尾）の card.id が前回と変われば
+  // 「誰かが札を出した」とみなし、その新カードに「回転しながら着地」を当てる。Draw2/Draw4 は
+  // 画面全体バーストに格上げ。animatePlay は state 受信時のみ true（welcome/再接続では誤発火
+  // させない）。lastTopId が null の間（初回/復元直後）も出さない。判定はすべてフロント表示層。
+  //
+  // 「追記（append）」だけを本物の play とみなす: 実プレイなら前トップ（lastTopId）は新しい
+  // recent_discards 窓（直近5枚）内に必ず残る。reset/再戦・new_game の開始めくり札では前トップが
+  // 窓から消える（別デッキで id 再採番）ので、これを弾いて開始札の誤発火（+2 バースト等）を防ぐ。
+  const newestTop = pile.length ? pile[pile.length - 1] : null;
+  const newestId = newestTop ? newestTop.id : null;
+  const isAppend =
+    state.lastTopId !== null && pile.some((c, i) => c.id === state.lastTopId && i < pile.length - 1);
+  if (animatePlay && feverOn() && newestId !== null && newestId !== state.lastTopId && isAppend) {
+    const topEl = discard.querySelector(".discard-card:last-child");
+    if (topEl) {
+      topEl.classList.add("fever-played");
+      void topEl.offsetWidth; // reflow でアニメを確実に発火
+      // 着地後は .fever-played を外し、Fever のアイドル・パルス（last-child）を復帰させる。
+      topEl.addEventListener("animationend", () => topEl.classList.remove("fever-played"), { once: true });
+    }
+    if (newestTop.symbol === "draw2" || newestTop.symbol === "draw4") {
+      screenBurst(newestTop.symbol); // +2/+4 は画面全体に飛び交うバースト
+    }
+  }
+  state.lastTopId = newestId;
   document.getElementById("draw-count").textContent = view.draw_count + " 枚";
   const forced = document.getElementById("forced-color");
   forced.textContent = view.forced_color || "-";
@@ -469,6 +497,7 @@ function confettiBurst() {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const layer = document.createElement("div");
   layer.className = "confetti";
+  layer.setAttribute("aria-hidden", "true"); // 装飾。スクリーンリーダーは読み上げない
   const pieces = ["🎉", "🎊", "✨", "🌈", "⭐️", "💜", "🔥", "🎈"];
   for (let i = 0; i < 48; i++) {
     const p = document.createElement("span");
@@ -484,6 +513,52 @@ function confettiBurst() {
   document.body.appendChild(layer);
   // 最長（delay 最大 .5s ＋ duration 最大 3s）を見込んで確実に掃除する。
   setTimeout(() => layer.remove(), 4000);
+}
+
+// Draw2/Draw4 を出したときの画面全体バースト（演出のみ・状態に無関係, #119）。中央から
+// 衝撃波フラッシュ＋絵文字が四方八方へ飛び交う。Draw4（heavy）は量を増やし盤面も短くシェイク
+// する。個体差（飛ぶ方向・回転・大きさ・遅延）は CSS 変数とインラインで与える。動きを抑えたい
+// ユーザー（prefers-reduced-motion）には出さない。呼び出しは Fever ON 時のみ（render 側で判定）。
+function screenBurst(kind) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const heavy = kind === "draw4";
+  const layer = document.createElement("div");
+  layer.className = "fx-burst";
+  layer.setAttribute("aria-hidden", "true"); // 装飾。スクリーンリーダーは読み上げない
+  layer.dataset.kind = kind; // draw2 / draw4 で色・量を変える（CSS 側）
+  const flash = document.createElement("div");
+  flash.className = "fx-flash";
+  layer.appendChild(flash);
+  const emojis = heavy ? ["🔥", "💥", "⚡️", "🌈", "⭐️", "💜"] : ["⚡️", "💫", "✨"];
+  const count = heavy ? 80 : 44;
+  for (let i = 0; i < count; i++) {
+    const s = document.createElement("span");
+    s.className = "fx-shard";
+    s.textContent = emojis[i % emojis.length];
+    // 画面中央付近から四方八方へ飛ばす（飛び交う感を出す）。飛距離・回転はランダム。
+    s.style.left = 50 + (Math.random() * 30 - 15) + "vw";
+    s.style.top = 50 + (Math.random() * 30 - 15) + "vh";
+    s.style.setProperty("--dx", Math.random() * 200 - 100 + "vw");
+    s.style.setProperty("--dy", Math.random() * 200 - 100 + "vh");
+    s.style.setProperty("--rot", Math.random() * 1440 - 720 + "deg");
+    s.style.animationDelay = Math.random() * 0.15 + "s";
+    s.style.animationDuration = (heavy ? 0.9 : 0.7) + Math.random() * 0.6 + "s";
+    s.style.fontSize = (heavy ? 1.4 : 1.0) + Math.random() * 1.6 + "rem";
+    layer.appendChild(s);
+  }
+  document.body.appendChild(layer);
+  // Draw4 は場（.table）を短くシェイクして「激しさ」を足す。盤面全体（.board）を揺らすと
+  // transform が固定オーバーレイ（cutin/banner/color-picker＝.board の子で position:fixed）の
+  // 包含ブロックになりズレるため、それらを含まない .table を対象にする（PR前レビュー指摘）。
+  if (heavy) {
+    const table = document.querySelector(".table");
+    if (table) {
+      table.classList.add("fx-shake");
+      setTimeout(() => table.classList.remove("fx-shake"), 600);
+    }
+  }
+  // 最長（delay 最大 .15s ＋ duration 最大 1.5s）を見込んで確実に掃除する。
+  setTimeout(() => layer.remove(), 2200);
 }
 
 // --- 入力ハンドラ（送信のみ） ---------------------------------------------
