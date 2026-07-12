@@ -295,6 +295,9 @@ body[data-turn="you"] .you {
    ゲート下のままなので操作はブロックされる。 */
 .topbar { position: relative; z-index: 29; }
 .rules-zone { position: relative; z-index: 29; }
+/* 退席（evicted）時はセッション終了なので、ヘッダー/設定パネルより上に出して全面を
+   覆う（待機中は 28 のままで盤面のみブロック, #115）。 */
+.gate.cover-all { z-index: 40; }
 
 /* カットイン（UNO!/指摘/強制ドローの一瞬の演出, #97）。中央に大きくスライドイン→
    ホールド→フェード。クリックは透過（pointer-events:none）。tone で色味を変える。 */

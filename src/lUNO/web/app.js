@@ -130,14 +130,19 @@ function updateGate() {
   const reload = document.getElementById("gate-reload");
   if (!gate || !msg || !reload) return;
   if (state.evicted) {
+    // 退席時はセッション終了なので全面を覆う（ヘッダー/設定も含めブロック）。
     msg.textContent = "参加者がリセットされました";
     toggleClass(reload, "hidden", false); // リロードで再参加する導線
+    toggleClass(gate, "cover-all", true);
     toggleClass(gate, "hidden", false);
   } else if (state.waiting) {
+    // 待機中は盤面のみブロック。ヘッダー/ルール設定は操作可能に残す（reset/new_game 免除）。
     msg.textContent = "対戦相手の接続を待っています…";
     toggleClass(reload, "hidden", true);
+    toggleClass(gate, "cover-all", false);
     toggleClass(gate, "hidden", false);
   } else {
+    toggleClass(gate, "cover-all", false);
     toggleClass(gate, "hidden", true);
   }
 }
