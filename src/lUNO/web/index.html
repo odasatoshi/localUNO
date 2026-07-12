@@ -21,6 +21,9 @@
              純表示設定。押すたびに data-fever を切替え、状態は app.js が localStorage に保存。 -->
         <button id="fever-btn" class="ghost-btn" type="button" aria-pressed="false" aria-label="Feverモード切替">🎉</button>
         <button id="reset-btn" class="ghost-btn" type="button">⟲ リセット</button>
+        <!-- 参加者リセット（#115）: 相手を退席させ、別ブラウザへの入れ替えを可能にする。
+             既存の「⟲ リセット（同じ2人で再配札）」とは別物。押下時に確認を挟む。 -->
+        <button id="reset-players-btn" class="ghost-btn" type="button">⎋ 参加者をリセット</button>
       </header>
 
       <!-- ローカルルール（確認 #84 ＋ 新規ゲーム時の ON/OFF 設定 #85）。設定なので
@@ -94,6 +97,16 @@
         <div class="banner-card">
           <span id="banner-msg"></span>
           <button id="rematch-btn" type="button">⟲ 再戦</button>
+        </div>
+      </div>
+
+      <!-- 待機/退席オーバーレイ（#115）。対戦相手の接続待ち（waiting_for_opponent）と、
+           参加者リセットで退席させられた側（evicted）で使い分ける。盤面を覆って操作を
+           ブロックする。evicted のときだけ「参加するにはリロード」ボタンを出す。 -->
+      <div id="gate" class="gate hidden" role="alert" aria-live="assertive">
+        <div class="gate-card">
+          <span id="gate-msg"></span>
+          <button id="gate-reload" class="hidden" type="button">参加するにはリロード</button>
         </div>
       </div>
     </main>

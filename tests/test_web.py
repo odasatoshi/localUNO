@@ -428,6 +428,39 @@ def test_app_js_challenge_uno_wired_and_shown_during_play():
     assert not re.search(r'toggleClass\(\s*[^;]*?challenge-btn[^;]*?oppCount', APP_JS, re.S)
 
 
+# --- 参加者リセット・待機ゲート（#115） -------------------------------------
+
+
+def test_index_has_reset_players_button_and_gate():
+    """参加者リセットボタンと待機/退席オーバーレイの受け皿が UI にある（#115）。"""
+    assert 'id="reset-players-btn"' in INDEX
+    assert 'id="gate"' in INDEX
+    assert 'id="gate-msg"' in INDEX
+    assert 'id="gate-reload"' in INDEX
+
+
+def test_app_js_reset_players_wired_with_confirm():
+    """参加者リセットボタンは確認ダイアログの後に reset_players を送る（#115）。"""
+    assert re.search(
+        r'getElementById\("reset-players-btn"\)\.addEventListener\(\s*"click"', APP_JS
+    )
+    assert "confirm(" in APP_JS  # 相手を退席させる破壊的操作なので確認を挟む
+    assert re.search(r'type:\s*"reset_players"', APP_JS)
+
+
+def test_app_js_handles_waiting_and_evicted():
+    """待機ゲート（#115）: waiting_for_opponent と evicted を扱い、退席時は再接続を止める。"""
+    assert "waiting_for_opponent" in APP_JS
+    assert '"evicted"' in APP_JS  # 退席メッセージ種別を扱う
+    assert "updateGate" in APP_JS
+    # 退席したら自動再接続を止める（席を奪わない）: evicted 時に stop を立てる
+    assert re.search(r"state\.evicted\s*=\s*true", APP_JS)
+    assert re.search(r"state\.stop\s*=\s*true", APP_JS)
+    # 退席時のリロード導線が結線されている
+    assert re.search(r'getElementById\("gate-reload"\)', APP_JS)
+    assert "location.reload()" in APP_JS
+
+
 # --- WS 往復（フロントが送る実ペイロードがサーバと整合するか） ---------------
 
 
@@ -452,6 +485,7 @@ def test_ws_frontend_play_payload_is_accepted_by_server():
             playable = _find_playable(welcome["view"]["your_hand"], top)
             if playable is None:
                 pytest.skip("この seed では初手に出せる札が無い")
+            ws1.receive_json()  # 相手参加でゲート解除の state（#115）
             ws1.send_text(json.dumps(_play_payload_from_app_js(playable["id"])))
             msg = ws1.receive_json()
             assert msg["type"] == "state"  # error でなく state が返る
@@ -491,6 +525,7 @@ def test_ws_multi_card_play_is_accepted_and_last_becomes_top():
         )
         with client.websocket_connect("/ws") as ws2:
             ws2.receive_json()
+            ws1.receive_json()  # 相手参加でゲート解除の state（#115）
             ws1.send_text(json.dumps({"type": "play", "player": "p1", "card_ids": group}))
             msg = ws1.receive_json()
             assert msg["type"] == "state"  # error でなく state が返る
@@ -518,6 +553,7 @@ def test_ws_pass_after_voluntary_draw_advances_turn():
         assert w1["view"]["current_player"] == "p1"
         with client.websocket_connect("/ws") as ws2:
             ws2.receive_json()
+            ws1.receive_json()  # 相手参加でゲート解除の state（#115）
             # p1 が自主ドロー（1枚）→ 手番保持のまま awaiting に pass が入る
             ws1.send_text(json.dumps({"type": "draw", "player": "p1"}))
             after_draw = ws1.receive_json()
@@ -546,6 +582,7 @@ def test_ws_declare_uno_misfire_penalizes_declarer():
         assert len(w1["view"]["your_hand"]) == 7
         with client.websocket_connect("/ws") as ws2:
             ws2.receive_json()
+            ws1.receive_json()  # 相手参加でゲート解除の state（#115）
             ws1.send_text(json.dumps({"type": "declare_uno", "player": "p1"}))
             msg = ws1.receive_json()
             assert msg["type"] == "state"  # error でなく state（常時受理）
@@ -566,6 +603,7 @@ def test_ws_challenge_uno_misfire_penalizes_challenger():
         assert len(w1["view"]["your_hand"]) == 7
         with client.websocket_connect("/ws") as ws2:
             ws2.receive_json()
+            ws1.receive_json()  # 相手参加でゲート解除の state（#115）
             ws1.send_text(json.dumps({"type": "challenge_uno", "player": "p1"}))
             msg = ws1.receive_json()
             assert msg["type"] == "state"  # 受理される
@@ -579,8 +617,13 @@ def test_ws_reconnect_restores_hand_via_token():
     with client.websocket_connect("/ws") as ws:
         w = ws.receive_json()
         token = w["token"]
-        ws.send_text(json.dumps({"type": "draw", "player": "p1"}))
-        ws.receive_json()
+        # 待機ゲート（#115）解除のため相手も接続してから操作する
+        with client.websocket_connect("/ws") as opp:
+            opp.receive_json()  # welcome
+            ws.receive_json()  # 相手参加でゲート解除の state
+            ws.send_text(json.dumps({"type": "draw", "player": "p1"}))
+            ws.receive_json()
+            opp.receive_json()  # p2 にもブロードキャスト
     with client.websocket_connect(f"/ws?token={token}") as ws2:
         w2 = ws2.receive_json()
         assert w2["player_id"] == "p1"

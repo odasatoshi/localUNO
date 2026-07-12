@@ -31,6 +31,10 @@ from ..rules import setup_game as default_setup
 
 PLAYER_IDS = ("p1", "p2")
 
+# 待機ゲート（#115）を免除する「席の顔ぶれに依存しない」仕切り直し系 Action。
+# これらは1人（片席のみ）でも実行でき、盤面/ルールの作り直しに使う。
+_ROSTER_ACTIONS = frozenset({ResetAction.type, NewGameAction.type})
+
 
 class SessionError(Exception):
     """セッション操作の失敗（未知トークン・プレイヤー不一致など）。"""
@@ -58,6 +62,18 @@ class ConnectResult:
     view: PlayerView
     replaced: object | None = None
     reconnected: bool = False
+
+
+@dataclass
+class ResetPlayersResult:
+    """参加者リセット（#115）の結果。
+
+    ``evicted`` は解放した相手席の**現行接続ハンドル**の一覧（app.py が
+    ``evicted`` 通知を送って close し、旧ブラウザをリロード待機へ誘導する）。切断中
+    （conn=None）だった席は解放されるが evicted には載らない（閉じる対象が無い）。
+    """
+
+    evicted: list[object]
 
 
 class Session:
@@ -150,6 +166,16 @@ class Session:
         slot = self._slots.get(token)
         return slot.player_id if slot else None
 
+    def waiting_for_opponent(self) -> bool:
+        """まだ両席が埋まっていない（対戦相手の接続待ち）か（#115）。
+
+        参加者リセット直後や初回接続直後など、席が1つしか埋まっていない間は True。
+        配信メッセージの ``waiting_for_opponent`` フラグと :meth:`apply` の待機ゲートの
+        **単一真実源**。切断中でも席（トークン）が残っていれば「埋まっている」扱い
+        （リロード復帰のための保持中はゲートしない）。
+        """
+        return len(self._by_player) < len(PLAYER_IDS)
+
     # --- 接続 -------------------------------------------------------------
 
     def connect(self, token: str | None = None, conn: object | None = None) -> ConnectResult:
@@ -197,6 +223,43 @@ class Session:
         if slot is not None:
             self._by_player.pop(slot.player_id, None)
 
+    def reset_players(self, token: str, player: str | None = None) -> ResetPlayersResult:
+        """参加者（席）をリセットし、別ブラウザへの入れ替えを可能にする（#115）。
+
+        要求者（``token`` の持ち主）は**自席・トークンを維持したまま在席**し、もう一方の
+        席を :meth:`release` で解放してトークンを無効化する。解放した席の**現行接続**は
+        ``ResetPlayersResult.evicted`` で返す（app.py が ``evicted`` 通知＋close で旧ブラウザ
+        をリロード待機へ誘導し、自動再接続で席を奪わせない）。盤面は同設定で再配札し、
+        連勝はリセットする。空いた席は次に接続/リロードした人が埋める（先着）。
+
+        ``player`` を渡した場合はトークンの席と一致すること（app 由来のなりすまし防止。
+        なりすましは :meth:`apply` と同じく :class:`SessionError`）。
+        """
+        slot = self._slots.get(token)
+        if slot is None:
+            raise SessionError(f"未知のトークン: {token!r}")
+        if player is not None and player != slot.player_id:
+            raise SessionError(f"トークンとプレイヤー不一致: {slot.player_id!r} != {player!r}")
+
+        keep = slot.player_id
+        evicted: list[object] = []
+        for pid in PLAYER_IDS:
+            if pid == keep:
+                continue
+            other = self._by_player.get(pid)
+            if other is None:
+                continue
+            if other.conn is not None:
+                evicted.append(other.conn)
+            self.release(other.token)  # 相手席のみ解放（要求者は据え置き）
+
+        # 顔ぶれが変わる仕切り直し＝新規対局扱い。先攻はランダム、連勝はリセット（#107/#108）。
+        # 相手が元々いない（evicted 空）場合も新規対局として作り直す（明示リセットの一貫動作）。
+        self._redeal(first_player=None)
+        self._streak_holder = None
+        self._streak_count = 0
+        return ResetPlayersResult(evicted=evicted)
+
     # --- Action 適用 ------------------------------------------------------
 
     def apply(self, token: str, action: Action | dict | str) -> GameState:
@@ -219,6 +282,11 @@ class Session:
         act = action if isinstance(action, Action) else parse(action)
         if act.player != slot.player_id:
             raise SessionError(f"トークンとプレイヤー不一致: {slot.player_id!r} != {act.player!r}")
+
+        # 待機ゲート（#115）: 両席が揃うまではゲーム操作を進行不可にする。仕切り直し系
+        # （reset/new_game）は待機中でも許す（1人で再配札・ルール変更して待てる）。
+        if act.type not in _ROSTER_ACTIONS and self.waiting_for_opponent():
+            raise SessionError("対戦相手の接続を待っています")
 
         if act.type == NewGameAction.type:
             self._new_game(act.enabled_rule_ids)
@@ -270,16 +338,25 @@ class Session:
             first_player, state = state.with_rng(lambda rng: rng.choice(PLAYER_IDS))
         return state.with_first_player(first_player)
 
+    def _redeal(self, first_player: str | None) -> None:
+        """新 seed を現在の RNG ストリームから決定的に引き、盤面を作り直す（#107）。
+
+        再戦(:meth:`_reset`)・ルール変更(:meth:`_new_game`)・参加者リセット
+        (:meth:`reset_players`) 共通の「新 seed → :meth:`_start`」を一元化する。
+        ``first_player`` は先攻指定（``None`` なら配札後 RNG からランダム）。
+        """
+        seed, _ = self._state.with_rng(lambda rng: rng.getrandbits(32))
+        self._state = self._start(seed, first_player)
+
     def _reset(self) -> None:
         """同じ2トークンのまま盤面を作り直す（再戦, §8）。新 seed は RNG から決定的に引く。
 
         ハウスルール(#107): 前ゲームの勝者を先攻にする。引き分け（勝者なし）は先攻を
         ランダムに決め直す（``first_player=None`` でランダム引きに委ねる）。
         """
-        seed, _ = self._state.with_rng(lambda rng: rng.getrandbits(32))
         winner = self._state.winner
         first = winner if winner in PLAYER_IDS else None
-        self._state = self._start(seed, first)
+        self._redeal(first)
 
     def _new_game(self, enabled_rule_ids: Iterable[str]) -> None:
         """選択したルール構成**と順序**で実行器を組み直し、盤面を新規に作る（設定変更, #85/#92）。
@@ -303,9 +380,8 @@ class Session:
         self._ordered_ids = ordered
         self._enabled_ids = frozenset(ordered)
         self._registry = default_registry(ordered)  # tuple → 与えた順で積む
-        seed, _ = self._state.with_rng(lambda rng: rng.getrandbits(32))
         # ルール変更しての新規開始は「勝者先攻」を適用せず、先攻はランダム（#107）。
-        self._state = self._start(seed, first_player=None)
+        self._redeal(first_player=None)
 
 
 __all__ = [
@@ -313,6 +389,7 @@ __all__ = [
     "Session",
     "Slot",
     "ConnectResult",
+    "ResetPlayersResult",
     "SessionError",
     "SessionFull",
 ]

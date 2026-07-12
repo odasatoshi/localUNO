@@ -30,6 +30,10 @@ const state = {
   canPlay: false,
   // 有効ローカルルールのメタ（welcome で一度届く。確認パネルの表示用, #84）。
   rules: null,
+  // 対戦相手の接続待ちか（待機ゲート #115）。true の間は操作をブロックする。
+  waiting: false,
+  // 参加者リセットで退席させられたか（#115）。true なら自動再接続せずリロードを促す。
+  evicted: false,
   // 直近のすて札トップの card.id（カード出し演出の差分検出用, #119）。トップが変われば
   // 「誰かが札を出した」とみなす。null なら未確立（初回/再接続直後は演出しない）。
   lastTopId: null,
@@ -55,6 +59,11 @@ function connect() {
     setStatus("接続済み");
   };
   ws.onclose = () => {
+    if (state.evicted) {
+      // 参加者リセットで退席させられた側は自動再接続しない（席を奪わないため, #115）。
+      setStatus("退席しました");
+      return;
+    }
     if (state.stop) {
       setStatus("接続できません（満席の可能性）");
       return;
@@ -85,6 +94,9 @@ function handleMessage(msg) {
       renderRules(msg.rules);
     }
     render(msg.view, false); // 再接続の復元描画。カード出し演出は出さない（#119）
+    // 対戦相手の接続待ちなら待機オーバーレイを出す（待機ゲート, #115）。
+    state.waiting = Boolean(msg.waiting_for_opponent);
+    updateGate();
   } else if (msg.type === "state") {
     // new_game 後の state はルールメタを同梱する。届いたときだけ設定パネルを更新
     // （通常の手番更新では送られないので、途中のチェック操作を消さない, #85）。
@@ -96,10 +108,45 @@ function handleMessage(msg) {
     // 直近アクションの出来事（UNO!/指摘/強制ドロー）をカットインで見せる（#97）。
     // welcome（再接続）では出さない＝古い出来事の再演を避ける。
     if (msg.view && msg.view.last_event) showCutIn(msg.view.last_event, state.me);
+    // 相手の参加/退席で待機状態が変わる（#115）。state ごとに反映しゲートを開閉する。
+    state.waiting = Boolean(msg.waiting_for_opponent);
+    updateGate();
+  } else if (msg.type === "evicted") {
+    // 参加者リセットで退席（#115）。この直後サーバが close するので、再接続停止フラグを
+    // 立てて（onclose で自動再接続しない）「参加するにはリロード」を表示する。先着の
+    // 別ブラウザに席を渡すため、ここで席を取りにいかない。
+    state.evicted = true;
+    state.stop = true;
+    updateGate();
   } else if (msg.type === "error") {
     setStatus("エラー: " + msg.message);
     // 満席（3人目以降）はサーバが close する。無限リトライを止める。
     if (msg.message && msg.message.indexOf("満席") !== -1) state.stop = true;
+  }
+}
+
+// 待機/退席オーバーレイ（#115）を状態から開閉する。退席（evicted）が最優先で、
+// 次に対戦相手の接続待ち（waiting）。どちらでもなければ隠して盤面を操作可能にする。
+function updateGate() {
+  const gate = document.getElementById("gate");
+  const msg = document.getElementById("gate-msg");
+  const reload = document.getElementById("gate-reload");
+  if (!gate || !msg || !reload) return;
+  if (state.evicted) {
+    // 退席時はセッション終了なので全面を覆う（ヘッダー/設定も含めブロック）。
+    msg.textContent = "参加者がリセットされました";
+    toggleClass(reload, "hidden", false); // リロードで再参加する導線
+    toggleClass(gate, "cover-all", true);
+    toggleClass(gate, "hidden", false);
+  } else if (state.waiting) {
+    // 待機中は盤面のみブロック。ヘッダー/ルール設定は操作可能に残す（reset/new_game 免除）。
+    msg.textContent = "対戦相手の接続を待っています…";
+    toggleClass(reload, "hidden", true);
+    toggleClass(gate, "cover-all", false);
+    toggleClass(gate, "hidden", false);
+  } else {
+    toggleClass(gate, "cover-all", false);
+    toggleClass(gate, "hidden", true);
   }
 }
 
@@ -435,6 +482,8 @@ let cutinTimer = null;
 function showCutIn(ev, me) {
   const el = document.getElementById("cutin");
   if (!el || !ev) return;
+  // 待機/退席オーバーレイ表示中はカットインを出さない（ゲートより前面に出さない, #115）。
+  if (state.waiting || state.evicted) return;
   const c = cutinContent(ev, me);
   if (!c) return;
   // 文言は固定文＋数値＋あなた/あいて のみ（外部入力なし）。
@@ -579,6 +628,17 @@ function wireControls() {
   });
   document.getElementById("reset-btn").addEventListener("click", () => {
     send({ type: "reset", player: state.me });
+  });
+  // 参加者リセット（#115）: 相手を退席させる破壊的操作なので確認を挟む。OK なら
+  // reset_players を送る。サーバが相手席を解放し、こちらは在席のまま待機表示になる。
+  document.getElementById("reset-players-btn").addEventListener("click", () => {
+    if (window.confirm("対戦相手を退席させて参加者をリセットします。よろしいですか？")) {
+      send({ type: "reset_players", player: state.me });
+    }
+  });
+  // 退席オーバーレイのリロードボタン: 明示リロードで空席に再入場する（先着, #115）。
+  document.getElementById("gate-reload").addEventListener("click", () => {
+    location.reload();
   });
   // 終局バナー内の再戦ボタン。現在のルール構成のまま再配札する（reset, §8）。
   document.getElementById("rematch-btn").addEventListener("click", () => {

@@ -243,6 +243,19 @@ class ResetAction(Action):
 
 @register
 @dataclass(frozen=True)
+class ResetPlayersAction(Action):
+    """参加者（席）をリセットして別ブラウザへの入れ替えを可能にする（#115）。
+
+    要求者は自席・トークンを維持したまま在席し続け、もう一方の席を解放する。空いた
+    席は次に接続/リロードした人が埋める（先着）。席解放・旧接続の切断はサーバ（Session/
+    app）が行う（サーバ権威）。同設定で盤面は再配札される。
+    """
+
+    type: ClassVar[str] = "reset_players"
+
+
+@register
+@dataclass(frozen=True)
 class NewGameAction(Action):
     """選択したローカルルール構成で新規ゲームを開始する（house-rules 設定, #85）。
 
@@ -284,6 +297,7 @@ __all__ = [
     "ChallengeUnoAction",
     "PassAction",
     "ResetAction",
+    "ResetPlayersAction",
     "NewGameAction",
     "register",
     "parse",
