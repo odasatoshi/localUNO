@@ -35,8 +35,10 @@ def test_index_has_fever_toggle_button(tmp_path):
 def test_app_js_wires_fever_toggle_and_persistence(tmp_path):
     """app.js が Fever をトグル・永続化・復元する配線を持つ。
 
-    リファクタで落ちない程度に、内部呼び出しの正確な字面ではなく「契約となる語彙」の
-    存在で確認する（localStorage キー・data-fever・関数・紙吹雪）。
+    純フロント機能ゆえ実挙動は単体試験できないので、機能の骨格となる識別子
+    （localStorage キー名・DOM 属性・主要関数名）の存在を回帰ガードとして確認する。
+    内部呼び出しの正確な字面（引数の並びやクォート）には依存しないので、無害な整形・
+    リネームでなければ落ちない。
     """
     client = make_client(tmp_path)
     js = client.get("/app.js").text
